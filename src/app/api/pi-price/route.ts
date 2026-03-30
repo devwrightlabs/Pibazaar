@@ -9,8 +9,12 @@ async function fetchPiPrice(): Promise<number | null> {
     // Use CoinGecko public API for Pi Network price
     const res = await fetch(
       'https://api.coingecko.com/api/v3/simple/price?ids=pi-network&vs_currencies=usd',
-      { next: { revalidate: 300 } }
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) }
     )
+    if (res.status === 429) {
+      // Rate limited — return null so caller falls back to cached value
+      return null
+    }
     if (!res.ok) return null
     const data = (await res.json()) as Record<string, { usd?: number }>
     return data?.['pi-network']?.usd ?? null

@@ -44,11 +44,11 @@ export default function PiPriceInput({ value, onChange }: Props) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value
     setLocalValue(raw)
+    // Don't call onChange for incomplete decimal input (e.g. "5." or "")
+    if (raw === '' || raw === '.') return
     const num = parseFloat(raw)
     if (!isNaN(num) && num >= 0) {
       debouncedOnChange(num)
-    } else if (raw === '' || raw === '.') {
-      debouncedOnChange(0)
     }
   }
 

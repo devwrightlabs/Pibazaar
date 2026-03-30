@@ -5,7 +5,12 @@ import type { ScrapedListing } from '@/lib/types'
 function isAllowedDomain(url: string): boolean {
   try {
     const { hostname } = new URL(url)
-    return hostname.endsWith('ebay.com') || hostname.endsWith('amazon.com')
+    return (
+      hostname === 'ebay.com' ||
+      hostname.endsWith('.ebay.com') ||
+      hostname === 'amazon.com' ||
+      hostname.endsWith('.amazon.com')
+    )
   } catch {
     return false
   }
@@ -32,8 +37,13 @@ async function scrapeEbay(html: string): Promise<Partial<ScrapedListing>> {
   const images: string[] = []
   $('img.img[src]').each((_, el) => {
     const src = $(el).attr('src') ?? ''
-    if (src.startsWith('https://i.ebayimg.com') && !images.includes(src)) {
-      images.push(src)
+    try {
+      const { hostname } = new URL(src)
+      if ((hostname === 'i.ebayimg.com' || hostname.endsWith('.ebayimg.com')) && !images.includes(src)) {
+        images.push(src)
+      }
+    } catch {
+      // skip invalid URLs
     }
   })
 
@@ -94,7 +104,7 @@ export async function POST(request: NextRequest) {
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
         },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(10000),
       })
       if (!res.ok) {
         return NextResponse.json(
@@ -109,9 +119,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { hostname } = new URL(url)
-    const scraped = hostname.endsWith('amazon.com')
-      ? await scrapeAmazon(html)
-      : await scrapeEbay(html)
+    const scraped =
+      hostname === 'amazon.com' || hostname.endsWith('.amazon.com')
+        ? await scrapeAmazon(html)
+        : await scrapeEbay(html)
 
     const result: ScrapedListing = {
       title: scraped.title ?? '',

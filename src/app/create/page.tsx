@@ -149,7 +149,6 @@ export default function CreateListingPage() {
         title: 'Listing published!',
         message: 'Your listing is now live on PiBazaar.',
         variant: 'info',
-        onConfirm: () => router.push(`/browse`),
       })
       setForm(INITIAL_FORM)
       router.push(`/browse`)

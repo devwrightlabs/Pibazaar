@@ -101,7 +101,7 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
       try {
         const compressed = await compressImage(file)
         const ext = 'jpg'
-        const path = `listings/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const path = `listings/${Date.now()}-${crypto.randomUUID()}.${ext}`
 
         setItems((prev) =>
           prev.map((p) => (p.id === itemId ? { ...p, progress: 50 } : p))
@@ -151,9 +151,18 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
       }))
 
       setItems((prev) => [...prev, ...newItems])
-      newItems.forEach((item, i) => {
-        void uploadFile(toAdd[i], item.id)
-      })
+
+      // Upload with max concurrency of 3
+      const CONCURRENCY = 3
+      let index = 0
+      const runNext = () => {
+        if (index >= toAdd.length) return
+        const i = index++
+        void uploadFile(toAdd[i], newItems[i].id).finally(runNext)
+      }
+      for (let i = 0; i < Math.min(CONCURRENCY, toAdd.length); i++) {
+        runNext()
+      }
     },
     [items.length, uploadFile]
   )
