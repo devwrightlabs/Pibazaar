@@ -191,7 +191,7 @@ export default function MapView() {
     )
   }
 
-  const handleManualLocation = (lat: number, lng: number) => {
+  const handleManualLocation = (lat: number, lng: number, _city: string) => {
     setCenter([lat, lng])
     setLocationDenied(false)
   }

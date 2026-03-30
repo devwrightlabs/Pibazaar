@@ -64,6 +64,7 @@ export default function ChatRoomPage() {
           .update({ is_read: true })
           .eq('conversation_id', conversationId)
           .neq('sender_id', currentUser.id)
+          .eq('is_read', false)
       }
       setLoading(false)
     }
