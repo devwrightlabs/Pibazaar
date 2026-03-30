@@ -26,8 +26,8 @@ export default function MapFallback({ onLocationFound, onRetryLocation }: Props)
         setError('City not found. Please try a different name.')
         return
       }
-      const { lat, lon } = data[0]
-      onLocationFound(parseFloat(lat), parseFloat(lon), trimmed)
+      const { lat, lon, display_name } = data[0]
+      onLocationFound(parseFloat(lat), parseFloat(lon), display_name ?? trimmed)
     } catch {
       setError('Failed to search location. Please try again.')
     } finally {

@@ -5,7 +5,6 @@ import type { Conversation } from '@/lib/types'
 
 interface Props {
   conversation: Conversation
-  currentUserId: string
   otherUserName: string
   otherUserAvatar?: string | null
   unreadCount?: number
@@ -13,7 +12,6 @@ interface Props {
 
 export default function ConversationCard({
   conversation,
-  currentUserId: _currentUserId,
   otherUserName,
   otherUserAvatar,
   unreadCount = 0,

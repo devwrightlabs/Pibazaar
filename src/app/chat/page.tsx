@@ -107,7 +107,6 @@ export default function ChatPage() {
                   <ConversationCard
                     key={conv.id}
                     conversation={conv}
-                    currentUserId={currentUser.id}
                     otherUserName={otherUserId}
                   />
                 )

@@ -9,7 +9,6 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading] = useState(false)
   const [connecting, setConnecting] = useState(false)
 
   const handleConnect = async () => {
@@ -46,7 +45,7 @@ export default function ProfilePage() {
           Profile
         </h1>
         <ErrorBoundary>
-          {loading ? (
+          {connecting ? (
             <LoadingSkeleton rows={3} />
           ) : profile ? (
             <div
