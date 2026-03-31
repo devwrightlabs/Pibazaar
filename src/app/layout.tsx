@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import '@/styles/globals.css'
 import BottomNav from '@/components/BottomNav'
 import GlobalModal from '@/components/GlobalModal'
+import RootErrorBoundary from '@/components/RootErrorBoundary'
 
 export const metadata: Metadata = {
   title: 'PiBazaar',
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body style={{ paddingBottom: '80px', backgroundColor: 'var(--color-background)' }}>
-        {children}
+        <RootErrorBoundary>
+          {children}
+        </RootErrorBoundary>
         <GlobalModal />
         <BottomNav />
       </body>
