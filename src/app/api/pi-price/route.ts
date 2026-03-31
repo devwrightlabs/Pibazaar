@@ -30,6 +30,7 @@ export async function GET() {
   if (cachedPrice && now - cachedPrice.fetchedAt < CACHE_TTL_MS) {
     return NextResponse.json({
       price_usd: cachedPrice.price_usd,
+      price: cachedPrice.price_usd,
       timestamp: new Date(cachedPrice.fetchedAt).toISOString(),
     })
   }
@@ -41,12 +42,13 @@ export async function GET() {
       // Return stale cache rather than failing
       return NextResponse.json({
         price_usd: cachedPrice.price_usd,
+        price: cachedPrice.price_usd,
         timestamp: new Date(cachedPrice.fetchedAt).toISOString(),
         stale: true,
       })
     }
     return NextResponse.json(
-      { error: 'Rate unavailable' },
+      { error: 'Rate unavailable', price: null },
       { status: 503 }
     )
   }
@@ -54,6 +56,7 @@ export async function GET() {
   cachedPrice = { price_usd: price, fetchedAt: now }
   return NextResponse.json({
     price_usd: price,
+    price,
     timestamp: new Date(now).toISOString(),
   })
 }
