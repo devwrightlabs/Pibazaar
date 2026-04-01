@@ -100,8 +100,7 @@ export function useMarketplace(initialListings: RecommendedListing[] = []) {
     if (initialListings.length === 0) {
       void fetchRecommendations(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [initialListings.length, fetchRecommendations])
 
   const setCategory = useCallback(
     (category: string) => {
