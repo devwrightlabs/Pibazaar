@@ -3,6 +3,8 @@ import '@/styles/globals.css'
 import BottomNav from '@/components/BottomNav'
 import GlobalModal from '@/components/GlobalModal'
 import RootErrorBoundary from '@/components/RootErrorBoundary'
+import StoreHydration from '@/components/providers/StoreHydration'
+import ThemeProvider from '@/components/providers/ThemeProvider'
 
 export const metadata: Metadata = {
   title: 'PiBazaar',
@@ -20,11 +22,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body style={{ paddingBottom: '80px', backgroundColor: 'var(--color-background)' }}>
-        <RootErrorBoundary>
-          {children}
-        </RootErrorBoundary>
-        <GlobalModal />
-        <BottomNav />
+        <StoreHydration />
+        <ThemeProvider>
+          <RootErrorBoundary>
+            {children}
+          </RootErrorBoundary>
+          <GlobalModal />
+          <BottomNav />
+        </ThemeProvider>
       </body>
     </html>
   )
