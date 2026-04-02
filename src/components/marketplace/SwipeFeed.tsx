@@ -52,7 +52,7 @@ export default function SwipeFeed({ listings }: SwipeFeedProps) {
         <div className="h-[100dvh] snap-start flex flex-col items-center justify-center gap-4 text-center px-8">
           <span className="text-5xl">🎉</span>
           <p className="text-xl font-bold font-heading text-text-primary">
-            You&apos;re all caught up
+            You're all caught up
           </p>
           <p className="text-sm text-text-sub">
             Check back later for more listings near you.
