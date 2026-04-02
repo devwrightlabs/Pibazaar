@@ -79,9 +79,9 @@ export default function ControlBar() {
       role="toolbar"
       aria-label="View and theme controls"
       className="sticky top-0 z-50 flex items-center justify-between px-4 py-2 backdrop-blur-md border-b border-border bg-control-bg"
-    >      {/* View mode switcher */}
+    >
+      {/* View mode switcher */}
       <div className="flex items-center gap-1">
-        {VIEW_BUTTONS.map(({ mode, label, Icon }) => {
           const isActive = viewMode === mode
           return (
             <button
