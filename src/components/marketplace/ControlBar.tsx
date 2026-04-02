@@ -82,6 +82,7 @@ export default function ControlBar() {
     >
       {/* View mode switcher */}
       <div className="flex items-center gap-1">
+        {VIEW_BUTTONS.map(({ mode, label, Icon }) => {
           const isActive = viewMode === mode
           return (
             <button

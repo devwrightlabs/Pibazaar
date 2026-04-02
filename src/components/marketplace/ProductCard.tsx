@@ -72,15 +72,13 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-6xl bg-secondary-bg">
-              📦
-            </div>
+            <div className="w-full h-full flex items-center justify-center bg-secondary-bg" />
           )}
 
           {/* Boosted badge */}
           {item.is_boosted && (
             <span className="absolute top-3 left-3 text-xs font-bold px-2 py-1 rounded-full z-10 bg-gold text-black">
-              ⚡ BOOSTED
+              BOOSTED
             </span>
           )}
 
@@ -88,7 +86,7 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
           <div className="absolute bottom-3 left-3 right-3 flex gap-2 flex-wrap z-10">
             {distanceKm !== null && (
               <span className="text-xs px-3 py-1 rounded-full backdrop-blur-md bg-backdrop text-text-primary">
-                📍 {distanceKm.toFixed(1)} km
+                {distanceKm.toFixed(1)} km
               </span>
             )}
             {conditionLabel && (
@@ -157,21 +155,19 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
                 onError={() => setImgError(true)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-3xl bg-secondary-bg">
-                📦
-              </div>
+              <div className="w-full h-full flex items-center justify-center bg-secondary-bg" />
             )}
             {/* Boosted badge */}
             {item.is_boosted && (
               <span className="absolute top-2 left-2 text-xs font-bold px-1.5 py-0.5 rounded-full z-10 bg-gold text-black">
-                ⚡
+                BOOSTED
               </span>
             )}
             {/* Floating pills */}
             <div className="absolute bottom-2 left-2 right-2 flex gap-1 flex-wrap z-10">
               {distanceKm !== null && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full backdrop-blur-md bg-backdrop text-text-primary leading-tight">
-                  📍 {distanceKm.toFixed(1)} km
+                  {distanceKm.toFixed(1)} km
                 </span>
               )}
               {conditionLabel && (
@@ -237,14 +233,14 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-4xl bg-secondary-bg">
-            📦
+            
           </div>
         )}
 
         {/* Boosted badge */}
         {item.is_boosted && (
           <span className="absolute top-2 left-2 text-xs font-bold px-2 py-0.5 rounded-full z-10 bg-gold text-black">
-            ⚡ BOOSTED
+            BOOSTED
           </span>
         )}
 
@@ -259,7 +255,7 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
         <div className="absolute bottom-2 left-2 right-2 flex gap-1 flex-wrap z-10">
           {distanceKm !== null && (
             <span className="text-xs px-2 py-0.5 rounded-full backdrop-blur-md bg-backdrop text-text-primary leading-tight">
-              📍 {distanceKm.toFixed(1)} km
+              {distanceKm.toFixed(1)} km
             </span>
           )}
           {conditionLabel && (

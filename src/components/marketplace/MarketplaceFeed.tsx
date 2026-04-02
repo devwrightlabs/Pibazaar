@@ -61,7 +61,6 @@ function FeedContent({ initialListings = [] }: MarketplaceFeedProps) {
       {/* Error state */}
       {error && listings.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-          <div className="text-5xl mb-4">⚠️</div>
           <p className="font-semibold mb-2 text-text-primary">
             Something went wrong
           </p>
@@ -80,7 +79,6 @@ function FeedContent({ initialListings = [] }: MarketplaceFeedProps) {
       {/* Empty state */}
       {!loading && !error && listings.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-          <div className="text-5xl mb-4">🛍️</div>
           <p className="font-semibold mb-2 text-text-primary">
             No listings found
           </p>
