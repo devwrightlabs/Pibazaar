@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ paddingBottom: '80px', backgroundColor: 'var(--color-background)' }}>
+      <body className="bg-background pb-20">
         <StoreHydration />
         <ThemeProvider>
           <RootErrorBoundary>
