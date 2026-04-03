@@ -10,6 +10,11 @@ import type {
   ShippingAddress,
   EscrowTimelineEvent,
 } from './types'
+import {
+  isSupabaseConfigured,
+  supabaseUrl,
+  supabaseAnonKey,
+} from './env'
 
 export type Database = {
   public: {
@@ -63,13 +68,8 @@ export type Database = {
   }
 }
 
-// Use placeholder values at build time when env vars are absent.
-// At runtime the real NEXT_PUBLIC_* vars will be present in the browser.
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co'
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-anon-key'
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+export { isSupabaseConfigured }
 
 
