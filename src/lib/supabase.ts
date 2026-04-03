@@ -68,16 +68,6 @@ export type Database = {
   }
 }
 
-// Warn loudly at module-init time so the issue surfaces immediately in both
-// server logs and browser devtools — even before the first query runs.
-if (!isSupabaseConfigured) {
-  console.error(
-    '[PiBazaar] Supabase client is using placeholder credentials. ' +
-      'Every query will fail. Set NEXT_PUBLIC_SUPABASE_URL and ' +
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment.'
-  )
-}
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export { isSupabaseConfigured }
