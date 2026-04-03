@@ -118,7 +118,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
       <div className="px-4 pt-6 max-w-lg mx-auto space-y-5">
         <div className="flex items-center gap-3 mb-2">
           <button onClick={() => router.back()} className="text-xl" style={{ color: 'var(--color-gold)' }}>
-            \u2190
+            ←
           </button>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}>
             Checkout
@@ -150,7 +150,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
                 {listing.title}
               </h2>
               <p className="font-bold mt-1" style={{ color: 'var(--color-gold)' }}>
-                {listing.price_pi} \u03c0
+                {listing.price_pi} π
               </p>
             </div>
           </div>

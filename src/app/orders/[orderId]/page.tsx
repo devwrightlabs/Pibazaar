@@ -120,7 +120,7 @@ function OrderDetailContent({ orderId }: OrderDetailContentProps) {
         {/* Header */}
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} className="text-xl" style={{ color: 'var(--color-gold)' }}>
-            \u2190
+            ←
           </button>
           <h1 className="text-xl font-bold" style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}>
             Order Detail
@@ -134,7 +134,7 @@ function OrderDetailContent({ orderId }: OrderDetailContentProps) {
         <div className="rounded-xl p-4 space-y-2" style={{ backgroundColor: 'var(--color-card-bg)' }}>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Order ID</span>
-            <span className="font-mono text-xs" style={{ color: 'var(--color-text)' }}>{order.id.slice(0, 8)}\u2026</span>
+            <span className="font-mono text-xs" style={{ color: 'var(--color-text)' }}>{order.id.slice(0, 8)}…</span>
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Type</span>
@@ -142,15 +142,15 @@ function OrderDetailContent({ orderId }: OrderDetailContentProps) {
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Amount</span>
-            <span className="font-bold" style={{ color: 'var(--color-gold)' }}>{order.amount_pi} \u03c0</span>
+            <span className="font-bold" style={{ color: 'var(--color-gold)' }}>{order.amount_pi} π</span>
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Escrow Fee</span>
-            <span style={{ color: 'var(--color-subtext)' }}>{order.escrow_fee_pi} \u03c0</span>
+            <span style={{ color: 'var(--color-subtext)' }}>{order.escrow_fee_pi} π</span>
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Seller Receives</span>
-            <span style={{ color: '#22C55E' }}>{order.net_amount_pi} \u03c0</span>
+            <span style={{ color: '#22C55E' }}>{order.net_amount_pi} π</span>
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--color-subtext)' }}>Date</span>
@@ -202,7 +202,7 @@ function OrderDetailContent({ orderId }: OrderDetailContentProps) {
                 className="w-full py-3 rounded-xl font-semibold text-sm"
                 style={{ backgroundColor: '#22C55E', color: '#fff', opacity: actionLoading ? 0.6 : 1 }}
               >
-                {actionLoading ? 'Processing\u2026' : '\u2713 Confirm Receipt'}
+                {actionLoading ? 'Processing…' : '\u2713 Confirm Receipt'}
               </button>
             )}
             {canDispute && (

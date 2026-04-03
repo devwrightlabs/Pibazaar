@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     await supabase.from('escrow_timeline').insert({
       escrow_id: typedEscrow.id,
       event: 'payment_received',
-      description: `Buyer paid ${amount_pi} \u03c0. Funds held in escrow.`,
+      description: `Buyer paid ${amount_pi} π. Funds held in escrow.`,
     } as Omit<EscrowTimelineEvent, 'id' | 'created_at'>)
 
     return NextResponse.json(typedEscrow, { status: 201 })

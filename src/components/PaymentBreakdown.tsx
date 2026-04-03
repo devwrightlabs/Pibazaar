@@ -27,7 +27,7 @@ export default function PaymentBreakdown({ amountPi }: PaymentBreakdownProps) {
   const total = parseFloat((amountPi + fee).toFixed(6))
 
   const toUsd = (pi: number) =>
-    usdPrice !== null ? `\u2248 $${(pi * usdPrice).toFixed(2)}` : ''
+    usdPrice !== null ? `≈ $${(pi * usdPrice).toFixed(2)}` : ''
 
   return (
     <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: 'var(--color-card-bg)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -38,7 +38,7 @@ export default function PaymentBreakdown({ amountPi }: PaymentBreakdownProps) {
         <div className="flex justify-between items-center">
           <span style={{ color: 'var(--color-subtext)' }}>Item price</span>
           <div className="text-right">
-            <span style={{ color: 'var(--color-text)' }}>{amountPi} \u03c0</span>
+            <span style={{ color: 'var(--color-text)' }}>{amountPi} π</span>
             {usdPrice !== null && (
               <span className="ml-2 text-xs" style={{ color: 'var(--color-subtext)' }}>{toUsd(amountPi)}</span>
             )}
@@ -47,7 +47,7 @@ export default function PaymentBreakdown({ amountPi }: PaymentBreakdownProps) {
         <div className="flex justify-between items-center">
           <span style={{ color: 'var(--color-subtext)' }}>Escrow fee (2.5%)</span>
           <div className="text-right">
-            <span style={{ color: 'var(--color-subtext)' }}>{fee} \u03c0</span>
+            <span style={{ color: 'var(--color-subtext)' }}>{fee} π</span>
             {usdPrice !== null && (
               <span className="ml-2 text-xs" style={{ color: 'var(--color-subtext)' }}>{toUsd(fee)}</span>
             )}
@@ -57,7 +57,7 @@ export default function PaymentBreakdown({ amountPi }: PaymentBreakdownProps) {
           <div className="flex justify-between items-center">
             <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Total</span>
             <div className="text-right">
-              <span className="font-bold" style={{ color: 'var(--color-gold)' }}>{total} \u03c0</span>
+              <span className="font-bold" style={{ color: 'var(--color-gold)' }}>{total} π</span>
               {usdPrice !== null && (
                 <span className="ml-2 text-xs" style={{ color: 'var(--color-subtext)' }}>{toUsd(total)}</span>
               )}

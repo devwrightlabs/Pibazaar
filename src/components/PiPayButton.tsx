@@ -73,11 +73,11 @@ export default function PiPayButton({
           <span
             className="inline-block w-5 h-5 rounded-full border-2 border-black border-t-transparent animate-spin"
           />
-          Processing\u2026
+          Processing…
         </>
       ) : (
         <>
-          Pay {amount.toFixed(2)} \u03c0
+          Pay {amount.toFixed(2)} π
         </>
       )}
     </button>

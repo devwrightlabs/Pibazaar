@@ -38,7 +38,7 @@ export default function OrderCard({ order, listingTitle, listingImage }: OrderCa
             {listingTitle ?? 'Order'}
           </p>
           <p className="text-sm font-bold mt-0.5" style={{ color: 'var(--color-gold)' }}>
-            {order.amount_pi} \u03c0
+            {order.amount_pi} π
           </p>
           <div className="flex items-center justify-between mt-2">
             <EscrowStatusBadge status={order.status} />
