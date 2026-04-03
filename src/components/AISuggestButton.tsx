@@ -58,7 +58,7 @@ export default function AISuggestButton({ title, category, condition, onGenerate
             Generating...
           </>
         ) : (
-          <>\u2728 Generate Description</>
+          <>✨ Generate Description</>
         )}
       </button>
       {error && (

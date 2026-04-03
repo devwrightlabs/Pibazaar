@@ -55,7 +55,7 @@ export default function PiPriceInput({ value, onChange }: Props) {
   const numericValue = parseFloat(localValue) || 0
   const usdEquiv =
     piPriceUsd !== null && numericValue > 0
-      ? `\u2248 $${(numericValue * piPriceUsd).toFixed(2)} USD`
+      ? `≈ $${(numericValue * piPriceUsd).toFixed(2)} USD`
       : null
 
   return (
@@ -68,7 +68,7 @@ export default function PiPriceInput({ value, onChange }: Props) {
         }}
       >
         <span className="text-lg font-bold" style={{ color: 'var(--color-gold)' }}>
-          \u03c0
+          π
         </span>
         <input
           type="number"
@@ -86,7 +86,7 @@ export default function PiPriceInput({ value, onChange }: Props) {
       </div>
       {localValue && numericValue > 0 && (
         <p className="mt-1 text-xs" style={{ color: 'var(--color-subtext)' }}>
-          {numericValue.toFixed(2)} \u03c0{' '}
+          {numericValue.toFixed(2)} π{' '}
           {priceError ? (
             <span style={{ color: 'var(--color-error)' }}>Rate unavailable</span>
           ) : usdEquiv ? (
