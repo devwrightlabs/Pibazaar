@@ -2,12 +2,20 @@
 
 import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import type { Listing } from '@/lib/types'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import ErrorBoundary from '@/components/ErrorBoundary'
 
 const CATEGORIES = ['All', 'Electronics', 'Clothing', 'Home', 'Garden', 'Outdoor', 'Sports', 'Books', 'Art']
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    return String((err as { message: unknown }).message)
+  }
+  return 'Failed to load listings. Please try again.'
+}
 
 function BrowseContent() {
   const searchParams = useSearchParams()
@@ -24,6 +32,15 @@ function BrowseContent() {
   const fetchListings = useCallback(async () => {
     setLoading(true)
     setError(null)
+
+    if (!isSupabaseConfigured) {
+      setError(
+        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your deployment environment.'
+      )
+      setLoading(false)
+      return
+    }
+
     try {
       let query = supabase
         .from('listings')
@@ -47,7 +64,7 @@ function BrowseContent() {
       setListings((data as Listing[]) ?? [])
     } catch (err) {
       console.error('Failed to fetch listings:', err)
-      setError('Failed to load listings. Please try again.')
+      setError(extractErrorMessage(err))
     } finally {
       setLoading(false)
     }
