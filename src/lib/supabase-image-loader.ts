@@ -19,16 +19,22 @@ export default function supabaseImageLoader({
   quality?: number
 }): string {
   const q = quality ?? 75
+  const base = supabaseUrl.replace(/\/$/, '')
+  const publicPrefix = `${base}/storage/v1/object/public/`
 
-  // If src is already a full Supabase storage URL, swap the object path for
-  // the render/image transform path so Supabase resizes on the fly.
+  // If src is already a full Supabase storage object URL for this project,
+  // swap the object path for the render/image transform path so Supabase
+  // resizes on the fly. Leave other absolute URLs unchanged.
   if (src.startsWith('http')) {
-    const renderUrl = src.replace('/object/public/', '/render/image/public/')
+    if (!src.startsWith(publicPrefix)) {
+      return src
+    }
+
+    const renderUrl = `${base}/storage/v1/render/image/public/${src.slice(publicPrefix.length)}`
     const separator = renderUrl.includes('?') ? '&' : '?'
     return `${renderUrl}${separator}width=${width}&quality=${q}`
   }
 
   // Otherwise treat src as a relative storage path and build the full URL.
-  const base = supabaseUrl.replace(/\/$/, '')
   return `${base}/storage/v1/render/image/public/listing-images/${src}?width=${width}&quality=${q}`
 }
