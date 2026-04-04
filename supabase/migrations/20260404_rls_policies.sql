@@ -5,9 +5,13 @@
 ALTER TABLE public.listings ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can view active listings (buyers browsing the marketplace).
+-- Sellers can also view their own inactive listings.
 CREATE POLICY "Anyone can view listings"
   ON public.listings FOR SELECT
-  USING (true);
+  USING (
+    is_active = true
+    OR auth.uid()::text = seller_id
+  );
 
 -- Only the seller/owner can insert their own listings.
 CREATE POLICY "Users can insert own listings"
