@@ -16,14 +16,15 @@ CREATE POLICY "Anyone can view listings"
 -- Temporary compatibility policies for the current client flow:
 -- listing writes are performed from a client using the anon key without a
 -- Supabase Auth session, so auth.uid() is NULL and auth-based RLS would
--- reject valid inserts/updates/deletes. Tighten these policies once seller
--- identities are mapped to Supabase Auth users or writes move to a trusted
--- server path.
+-- reject valid updates/deletes. Direct public/anon inserts must not trust a
+-- caller-supplied seller_id; allow inserts only from a trusted server-side
+-- path until seller identities are mapped to Supabase Auth users.
 
--- Allow listing inserts as long as the seller id is present.
-CREATE POLICY "Users can insert own listings"
+-- Only trusted server-side code may insert listings.
+CREATE POLICY "Service role can insert listings"
   ON public.listings FOR INSERT
-  WITH CHECK (nullif(trim(seller_id), '') IS NOT NULL);
+  TO service_role
+  WITH CHECK (true);
 
 -- Allow listing updates while the client flow has no Supabase Auth session.
 -- This preserves the current client-side edit behavior; replace with
