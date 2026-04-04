@@ -12,7 +12,14 @@ export type UserRow = {
   updated_at: string
 }
 
-export type UserInsert = Omit<UserRow, 'id' | 'created_at' | 'updated_at'>
+export type UserInsert = Omit<
+  UserRow,
+  'id' | 'created_at' | 'updated_at' | 'email' | 'avatar_url' | 'bio'
+> & {
+  email?: string | null
+  avatar_url?: string | null
+  bio?: string | null
+}
 export type UserUpdate = Partial<Omit<UserRow, 'id'>>
 
 // ─── listings table ──────────────────────────────────────────────────────────
