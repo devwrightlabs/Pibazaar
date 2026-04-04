@@ -2,7 +2,7 @@
  * Supabase Storage helpers for the listing-images bucket.
  *
  * Exports upload, delete, and URL-resolution utilities, along with
- * the bucket name and validation constants used by the PhotoUploader.
+ * the bucket name and validation constants for listing image storage.
  */
 
 import { supabase } from '@/lib/supabase'
