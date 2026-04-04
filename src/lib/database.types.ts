@@ -24,13 +24,13 @@ export type ListingRow = {
   description: string
   price_pi: number
   category: string
-  condition?: 'new' | 'like_new' | 'good' | 'fair'
+  condition: 'new' | 'like_new' | 'good' | 'fair' | null
   images: string[]
   location_lat: number
   location_lng: number
   city: string
   country: string
-  allow_offers?: boolean
+  allow_offers: boolean | null
   is_active: boolean
   is_boosted: boolean
   created_at: string
