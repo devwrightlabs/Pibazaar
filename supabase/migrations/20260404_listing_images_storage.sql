@@ -13,27 +13,38 @@ CREATE POLICY "Anyone can read listing images"
   USING (bucket_id = 'listing-images');
 
 -- Authenticated users can upload files to the listing-images bucket.
--- Files must be scoped under the uploading user's own folder: {user_id}/...
+-- Support both user-scoped paths ({user_id}/...) and the existing legacy listings/... prefix.
 CREATE POLICY "Authenticated users can upload listing images"
   ON storage.objects FOR INSERT
   WITH CHECK (
     bucket_id = 'listing-images'
     AND auth.role() = 'authenticated'
-    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR (storage.foldername(name))[1] = 'listings'
+    )
   );
 
--- Users can only update their own uploads (matched by folder prefix).
+-- Authenticated users can update files in their own folder or under the legacy listings/... prefix.
 CREATE POLICY "Users can update own listing images"
   ON storage.objects FOR UPDATE
   USING (
     bucket_id = 'listing-images'
-    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR (storage.foldername(name))[1] = 'listings'
+    )
   );
 
--- Users can only delete their own uploads (matched by folder prefix).
+-- Authenticated users can delete files in their own folder or under the legacy listings/... prefix.
 CREATE POLICY "Users can delete own listing images"
   ON storage.objects FOR DELETE
   USING (
     bucket_id = 'listing-images'
-    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR (storage.foldername(name))[1] = 'listings'
+    )
   );
