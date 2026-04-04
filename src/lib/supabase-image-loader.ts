@@ -35,6 +35,13 @@ export default function supabaseImageLoader({
     return `${renderUrl}${separator}width=${width}&quality=${q}`
   }
 
-  // Otherwise treat src as a relative storage path and build the full URL.
+  // Leave root-relative local/static assets unchanged so Next.js can serve
+  // files like /logo.png from the app's public directory.
+  if (src.startsWith('/')) {
+    return src
+  }
+
+  // Treat other non-absolute values as relative storage paths and build the
+  // full URL for the listing-images bucket.
   return `${base}/storage/v1/render/image/public/listing-images/${src}?width=${width}&quality=${q}`
 }
