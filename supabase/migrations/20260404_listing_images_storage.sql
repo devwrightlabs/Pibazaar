@@ -13,14 +13,20 @@ CREATE POLICY "Anyone can read listing images"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'listing-images');
 
--- Authenticated users can upload files to the listing-images bucket only in their own folder.
--- User-scoped paths must use the top-level {user_id}/... prefix.
+-- Uploads to the listing-images bucket are allowed for either:
+--   1) authenticated users writing inside their own top-level {user_id}/... folder, or
+--   2) the current public uploader flow writing inside the legacy listings/... prefix.
 CREATE POLICY "Authenticated users can upload listing images"
   ON storage.objects FOR INSERT
   WITH CHECK (
     bucket_id = 'listing-images'
-    AND auth.role() = 'authenticated'
-    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND (
+      (
+        auth.role() = 'authenticated'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      )
+      OR (storage.foldername(name))[1] = 'listings'
+    )
   );
 
 -- Authenticated users can update files only in their own folder.
