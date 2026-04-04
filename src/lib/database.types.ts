@@ -30,15 +30,19 @@ export type ListingRow = {
   location_lng: number
   city: string
   country: string
-  allow_offers: boolean | null
+  allow_offers?: boolean
   is_active: boolean
   is_boosted: boolean
   created_at: string
   updated_at: string
 }
 
-export type ListingInsert = Omit<ListingRow, 'id' | 'created_at' | 'updated_at'>
-export type ListingUpdate = Partial<Omit<ListingRow, 'id'>>
+export type ListingInsert = Omit<ListingRow, 'id' | 'created_at' | 'updated_at'> & {
+  allow_offers?: boolean | null
+}
+export type ListingUpdate = Partial<Omit<ListingRow, 'id'>> & {
+  allow_offers?: boolean | null
+}
 
 // ─── orders table ────────────────────────────────────────────────────────────
 
