@@ -37,10 +37,13 @@ export type ListingRow = {
   updated_at: string
 }
 
-export type ListingInsert = Omit<ListingRow, 'id' | 'created_at' | 'updated_at'> & {
+export type ListingInsert = Omit<
+  ListingRow,
+  'id' | 'created_at' | 'updated_at' | 'allow_offers'
+> & {
   allow_offers?: boolean | null
 }
-export type ListingUpdate = Partial<Omit<ListingRow, 'id'>> & {
+export type ListingUpdate = Partial<Omit<ListingRow, 'id' | 'allow_offers'>> & {
   allow_offers?: boolean | null
 }
 
