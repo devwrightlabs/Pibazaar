@@ -14,32 +14,31 @@ CREATE POLICY "Anyone can view listings"
   );
 
 -- Temporary compatibility policies for the current client flow:
--- listing writes are performed from a client using the anon key without a
--- Supabase Auth session, so auth.uid() is NULL and auth-based RLS would
--- reject valid updates/deletes. Direct public/anon inserts must not trust a
--- caller-supplied seller_id; allow inserts only from a trusted server-side
--- path until seller identities are mapped to Supabase Auth users.
+-- Temporary compatibility policy for inserts:
+-- listing creation is currently performed from a client using the anon key
+-- without a Supabase Auth session, so auth.uid() is NULL and auth-based RLS
+-- would reject inserts. Tighten this once seller identities are mapped to
+-- Supabase Auth users or inserts move to a trusted server path.
 
--- Only trusted server-side code may insert listings.
-CREATE POLICY "Service role can insert listings"
+-- Allow listing inserts as long as the seller id is present.
+CREATE POLICY "Users can insert own listings"
   ON public.listings FOR INSERT
-  TO service_role
-  WITH CHECK (true);
-
--- Allow listing updates while the client flow has no Supabase Auth session.
--- This preserves the current client-side edit behavior; replace with
--- auth.uid()-based ownership checks after adding Supabase Auth integration.
-CREATE POLICY "Users can update own listings"
-  ON public.listings FOR UPDATE
-  USING (nullif(trim(seller_id), '') IS NOT NULL)
   WITH CHECK (nullif(trim(seller_id), '') IS NOT NULL);
 
--- Allow listing deletes while the client flow has no Supabase Auth session.
--- Replace with auth.uid()-based ownership checks after adding Supabase Auth
--- integration or moving deletes to a trusted server path.
-CREATE POLICY "Users can delete own listings"
+-- Only trusted server-side code may update listings until ownership can be
+-- enforced with a real authenticated identity mapping.
+CREATE POLICY "Service role can update listings"
+  ON public.listings FOR UPDATE
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Only trusted server-side code may delete listings until ownership can be
+-- enforced with a real authenticated identity mapping.
+CREATE POLICY "Service role can delete listings"
   ON public.listings FOR DELETE
-  USING (nullif(trim(seller_id), '') IS NOT NULL);
+  TO service_role
+  USING (true);
 
 -- ============================================================
 -- Row Level Security policies for the user_profiles table
