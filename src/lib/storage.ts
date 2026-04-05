@@ -21,7 +21,7 @@ export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 // ─── Product-images bucket constants ─────────────────────────────────────────
 
 /** Storage bucket name for product images (Phase 3). */
-export const STORAGE_BUCKET = 'product-images'
+export const PRODUCT_IMAGES_BUCKET = 'product-images'
 
 /** Alias exported under the name expected by consumers of the product upload API. */
 export const MAX_IMAGES_PER_PRODUCT = 10
