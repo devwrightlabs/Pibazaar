@@ -196,7 +196,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     if (search) {
-      // Escape ilike special characters (%, _, \) so user input is treated literally.
+      // Reject PostgREST filter-string reserved characters before interpolating
+      // user input into `.or(...)`, then escape ilike wildcard characters so
+      // the remaining input is treated literally in the pattern match.
+      if (/[(),]/.test(search)) {
+        return NextResponse.json(
+          { error: 'Search contains invalid characters' },
+          { status: 400 }
+        )
+      }
       const escaped = escapeIlike(search)
       query = query.or(`title.ilike.%${escaped}%,description.ilike.%${escaped}%`)
     }
