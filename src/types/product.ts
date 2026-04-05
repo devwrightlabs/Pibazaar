@@ -28,7 +28,6 @@ export interface CreateProductRequest {
   condition?: 'new' | 'like_new' | 'good' | 'fair' | 'poor'
   images?: string[]
   location_text?: string
-  shipping_method?: string
 }
 
 export interface ProductSearchParams {
