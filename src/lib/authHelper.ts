@@ -52,15 +52,37 @@ export function verifyAuthToken(req: NextRequest): AuthPayload | null {
     return null
   }
 
-  try {
-    const payload = jwt.verify(token, jwtSecret) as AuthPayload
+  const supabaseUrl = process.env.SUPABASE_URL
+  if (!supabaseUrl) {
+    console.error('[authHelper] SUPABASE_URL is not set')
+    return null
+  }
 
-    if (!payload.pi_uid) {
+  try {
+    const decoded = jwt.verify(token, jwtSecret, {
+      algorithms: ['HS256'],
+      audience: 'authenticated',
+      issuer: supabaseUrl,
+    })
+
+    if (!decoded || typeof decoded !== 'object') {
+      console.error('[authHelper] JWT payload has invalid format')
+      return null
+    }
+
+    const payload = decoded as AuthPayload
+
+    if (typeof payload.pi_uid !== 'string' || !payload.pi_uid) {
       console.error('[authHelper] JWT is missing pi_uid claim')
       return null
     }
 
-    if (payload.role !== 'authenticated') {
+    if (typeof payload.sub !== 'string' || !payload.sub) {
+      console.error('[authHelper] JWT is missing sub claim')
+      return null
+    }
+
+    if (typeof payload.role !== 'string' || payload.role !== 'authenticated') {
       console.error('[authHelper] JWT has unexpected role claim:', payload.role)
       return null
     }
