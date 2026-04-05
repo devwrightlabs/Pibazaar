@@ -49,6 +49,11 @@ USING (
   bucket_id = 'product-images'
   AND auth.role() = 'authenticated'
   AND (storage.foldername(name))[1] = (auth.jwt() ->> 'pi_uid')
+)
+WITH CHECK (
+  bucket_id = 'product-images'
+  AND auth.role() = 'authenticated'
+  AND (storage.foldername(name))[1] = (auth.jwt() ->> 'pi_uid')
 );
 
 -- Delete: users can only remove images from their own folder.
