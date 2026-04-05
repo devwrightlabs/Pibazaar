@@ -52,7 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     // 3. Validate and sanitize inputs.
-    const title = body.title?.trim() ?? ''
+    const title = typeof body.title === 'string' ? body.title.trim() : ''
     if (!title) {
       return NextResponse.json({ error: 'title is required' }, { status: 400 })
     }
