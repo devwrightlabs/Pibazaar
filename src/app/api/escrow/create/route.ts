@@ -70,13 +70,17 @@ export async function POST(req: NextRequest) {
 
     // 5. Check for duplicate active escrow for this product.
     //    An escrow is considered active when its status is not a terminal state.
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('escrow_transactions')
       .select('id, status')
       .eq('product_id', product_id)
       .in('status', ['pending', 'funded', 'shipped', 'delivered', 'disputed'])
       .maybeSingle()
 
+    if (existingError) {
+      console.error('[escrow/create] Duplicate escrow lookup error:', existingError)
+      return NextResponse.json({ error: 'Failed to verify existing escrow' }, { status: 500 })
+    }
     if (existing) {
       return NextResponse.json(
         { error: 'An active escrow already exists for this product' },
