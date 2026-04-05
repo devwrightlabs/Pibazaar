@@ -68,13 +68,12 @@ export async function POST(req: NextRequest) {
     }
     const amountPi = parseFloat((Number(product.price_pi) + shippingCost).toFixed(PI_AMOUNT_PRECISION))
 
-    // 5. Check for duplicate active escrow (same product + same buyer).
+    // 5. Check for duplicate active escrow for this product.
     //    An escrow is considered active when its status is not a terminal state.
     const { data: existing } = await supabaseAdmin
       .from('escrow_transactions')
       .select('id, status')
       .eq('product_id', product_id)
-      .eq('buyer_id', buyerPiUid)
       .in('status', ['pending', 'funded', 'shipped', 'delivered', 'disputed'])
       .maybeSingle()
 
