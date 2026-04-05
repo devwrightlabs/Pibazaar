@@ -12,7 +12,7 @@ export interface Product {
   description: string | null
   price_pi: number
   category: string | null
-  condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor'
+  condition: 'new' | 'like_new' | 'good' | 'fair' | 'poor' | null
   images: string[] | null
   status: 'active' | 'sold' | 'removed'
   location_text: string | null
