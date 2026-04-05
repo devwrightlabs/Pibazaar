@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Transaction must be in a completed state.
-    if (!COMPLETED_STATUSES.includes(escrow.status as typeof COMPLETED_STATUSES[number])) {
+    if (!(COMPLETED_STATUSES as readonly string[]).includes(escrow.status)) {
       return NextResponse.json(
         { error: 'Transaction must be completed before leaving a review' },
         { status: 400 }
