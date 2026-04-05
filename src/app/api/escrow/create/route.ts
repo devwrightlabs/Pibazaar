@@ -57,10 +57,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Calculate total amount — price is always read from DB, never from client.
-    const shippingCost =
-      shipping_method && shipping_method in SHIPPING_COSTS
-        ? SHIPPING_COSTS[shipping_method]
-        : 0
+    let shippingCost = 0
+
+    if (shipping_method) {
+      if (!Object.hasOwn(SHIPPING_COSTS, shipping_method)) {
+        return NextResponse.json({ error: 'Invalid shipping_method' }, { status: 400 })
+      }
+
+      shippingCost = SHIPPING_COSTS[shipping_method]
+    }
     const amountPi = parseFloat((Number(product.price_pi) + shippingCost).toFixed(PI_AMOUNT_PRECISION))
 
     // 5. Check for duplicate active escrow (same product + same buyer).
