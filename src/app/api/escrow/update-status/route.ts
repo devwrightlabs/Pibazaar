@@ -156,14 +156,21 @@ export async function POST(req: NextRequest) {
       .from('escrow_transactions')
       .update(updateData)
       .eq('id', escrow_id)
+      .eq('status', typedEscrow.status)
       .select('id, status, updated_at')
-      .single()
+      .maybeSingle()
 
-    if (updateError || !updated) {
+    if (updateError) {
       console.error('[escrow/update-status] Update error:', updateError)
       return NextResponse.json({ error: 'Failed to update escrow status' }, { status: 500 })
     }
 
+    if (!updated) {
+      return NextResponse.json(
+        { error: 'Escrow status changed before the update could be applied' },
+        { status: 409 }
+      )
+    }
     // 8. If refunded, restore the product to 'active'.
     if (action === 'refunded') {
       // `product_id` is the Phase 2 canonical column; `listing_id` is kept in
