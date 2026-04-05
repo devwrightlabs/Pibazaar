@@ -104,7 +104,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const supabaseUrl = process.env.SUPABASE_URL
+    if (!supabaseUrl) {
+      console.error('[auth/verify] SUPABASE_URL is not set')
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
     const JWT_EXPIRY_SECONDS = 3600 // 1 hour
     const now = Math.floor(Date.now() / 1000)
 
