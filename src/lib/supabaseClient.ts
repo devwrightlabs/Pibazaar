@@ -30,9 +30,9 @@ let supabaseInstance: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey
 
 /**
  * Returns the current Supabase client instance.
- * Components should call this getter (or import `supabase` directly) rather
- * than caching the reference, so they always receive the authorised client
- * after `setSupabaseAuth()` has been called.
+ * Components should call this getter each time rather than caching the
+ * reference, so they always receive the authorised client after
+ * `setSupabaseAuth()` has been called.
  */
 export function getSupabaseClient(): SupabaseClient {
   return supabaseInstance
