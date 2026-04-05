@@ -63,15 +63,18 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE TRIGGER users_updated_at
+DROP TRIGGER IF EXISTS users_updated_at ON public.users;
+CREATE TRIGGER users_updated_at
   BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-CREATE OR REPLACE TRIGGER products_updated_at
+DROP TRIGGER IF EXISTS products_updated_at ON public.products;
+CREATE TRIGGER products_updated_at
   BEFORE UPDATE ON public.products
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-CREATE OR REPLACE TRIGGER escrow_updated_at
+DROP TRIGGER IF EXISTS escrow_updated_at ON public.escrow_transactions;
+CREATE TRIGGER escrow_updated_at
   BEFORE UPDATE ON public.escrow_transactions
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
