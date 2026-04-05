@@ -150,13 +150,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Check for duplicate review.
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('reviews')
       .select('id')
       .eq('escrow_id', escrow_id)
       .eq('reviewer_id', reviewerPiUid)
-      .single()
+      .maybeSingle()
 
+    if (existingError) {
+      console.error('[users/reviews/POST] Duplicate review check error:', existingError)
+      return NextResponse.json({ error: 'Failed to submit review' }, { status: 500 })
+    }
     if (existing) {
       return NextResponse.json(
         { error: 'You have already reviewed this transaction' },
