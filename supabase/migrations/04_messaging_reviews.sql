@@ -29,7 +29,8 @@ CREATE INDEX IF NOT EXISTS messages_conversation_idx
   ON public.messages (sender_id, receiver_id, created_at);
 
 CREATE INDEX IF NOT EXISTS messages_receiver_unread_idx
-  ON public.messages (receiver_id, is_read);
+  ON public.messages (receiver_id)
+  WHERE is_read = false;
 
 -- ─── reviews ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.reviews (
