@@ -54,11 +54,14 @@ CREATE TABLE IF NOT EXISTS public.escrow_transactions (
   status          TEXT           NOT NULL DEFAULT 'pending'
                                  CHECK (status IN (
                                    'pending',
+                                   'pending_payment',
                                    'payment_received',
                                    'shipped',
+                                   'delivered',
                                    'completed',
                                    'funded',
                                    'released',
+                                   'auto_released',
                                    'refunded',
                                    'disputed'
                                  )),
