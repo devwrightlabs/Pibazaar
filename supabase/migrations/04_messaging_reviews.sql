@@ -8,8 +8,8 @@
 
 -- ─── Add trust_score and total_sales to users ────────────────────────────────
 ALTER TABLE public.users
-  ADD COLUMN IF NOT EXISTS trust_score NUMERIC(3,2) DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS total_sales INTEGER DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS trust_score NUMERIC(3,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS total_sales INTEGER NOT NULL DEFAULT 0;
 
 -- ─── messages ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.messages (
