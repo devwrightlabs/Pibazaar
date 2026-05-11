@@ -111,10 +111,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       pi_uid: piUser.uid,
       username: piUser.username ?? 'Pioneer',
       avatar_url: '',
+      wallet_address: walletAddress ?? null,
       updated_at: new Date().toISOString(),
-    }
-    if (walletAddress) {
-      upsertPayload.wallet_address = walletAddress
     }
 
     const { data: dbUser, error: upsertError } = await supabaseAdmin

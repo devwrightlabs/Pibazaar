@@ -109,7 +109,7 @@ export default function HomePage() {
               P2P Bazaar Marketplace
             </h1>
             <p className="text-sm sm:text-base mb-8 max-w-xs sm:max-w-sm" style={{ color: 'var(--color-subtext)' }}>
-              Buy and sell locally with Pi — the decentralised marketplace built for Pioneers.
+              Buy and sell locally with Pi — the decentralized marketplace built for Pioneers.
             </p>
 
             {/* Login / Sign Up buttons */}
