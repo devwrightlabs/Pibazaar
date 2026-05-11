@@ -18,6 +18,7 @@ interface PiAuthResult {
   user: {
     uid: string
     username: string
+    wallet_address?: string
   }
 }
 
@@ -107,7 +108,7 @@ export async function authenticateWithPi(): Promise<PiAuthResult | null> {
       return null
     }
 
-    const scopes = ['username', 'payments']
+    const scopes = ['username', 'payments', 'wallet_address']
     const onIncompletePaymentFound = () => {}
     const authResult = await window.Pi.authenticate(scopes, onIncompletePaymentFound)
     console.info('[pi-sdk] Wallet Connected! Welcome: ' + authResult.user.username)
