@@ -43,6 +43,11 @@ interface PiMeResponse {
   username: string
 }
 
+interface ExistingUser {
+  id: string
+  is_verified: boolean
+}
+
 interface VerifyRequestBody {
   accessToken?: unknown
   user?: {
@@ -95,9 +100,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // 3. Check whether this is a new sign-up or an existing login.
     //    We look up the user by pi_uid first so we can return the distinction
     //    to the client (isNewUser). The upsert handles both cases atomically.
+    //    We also fetch is_verified so it is never reset to false on re-login.
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, is_verified')
       .eq('pi_uid', piUser.uid)
       .maybeSingle()
 
@@ -107,12 +113,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //    role client (bypasses RLS — this is intentional for the auth route only).
     //    For new users (Sign Up): inserts a full row including wallet_address.
     //    For existing users (Login): updates username and wallet_address.
+    //
+    //    is_verified is required (NOT NULL) — preserve the existing value on
+    //    re-login and default to false for brand-new accounts.
+    const typedExistingUser = existingUser as ExistingUser | null
     const upsertPayload: Record<string, unknown> = {
       pi_uid: piUser.uid,
       username: piUser.username ?? 'Pioneer',
-      avatar_url: '',
+      avatar_url: null,
       wallet_address: walletAddress ?? null,
       updated_at: new Date().toISOString(),
+      is_verified: typedExistingUser?.is_verified ?? false,
     }
 
     const { data: dbUser, error: upsertError } = await supabaseAdmin
@@ -122,7 +133,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .single()
 
     if (upsertError || !dbUser) {
-      console.error('[auth/verify] DB upsert error:', upsertError)
+      console.error('[auth/verify] DB upsert error:', {
+        message: upsertError?.message,
+        code: upsertError?.code,
+        details: upsertError?.details,
+        hint: upsertError?.hint,
+      })
       return NextResponse.json({ error: 'Failed to persist user' }, { status: 500 })
     }
 
