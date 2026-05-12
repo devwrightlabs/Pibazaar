@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
 
@@ -26,6 +27,7 @@ export function usePiAuth() {
 
 export default function PiAuthProvider({ children }: { children: React.ReactNode }) {
   const { setCurrentUser } = useStore()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isPiSdkReady, setIsPiSdkReady] = useState(false)
@@ -88,8 +90,8 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         return
       }
 
-      // 2. POST the accessToken (and user object) to the backend for
-      //    server-side verification and JWT minting.
+      // 2. POST the accessToken (and user object, including wallet_address) to the
+      //    backend for server-side verification and JWT minting.
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,10 +115,12 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
       const data = (await res.json()) as {
         token: string
+        isNewUser: boolean
         user: {
           pi_uid: string
           username: string | null
           avatar_url: string | null
+          wallet_address: string | null
         }
       }
 
@@ -134,6 +138,9 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         bio: null,
         created_at: new Date().toISOString(),
       })
+
+      // 5. Route to the profile dashboard after successful login or sign-up.
+      router.push('/profile')
     } catch (err) {
       console.error('[PiAuthProvider] Login failed:', err)
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
@@ -141,7 +148,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       // CRITICAL: Always reset loading state, even if the SDK hangs or times out.
       setLoading(false)
     }
-  }, [isPiSdkReady, setCurrentUser])
+  }, [isPiSdkReady, setCurrentUser, router])
 
   return (
     <PiAuthContext.Provider value={{ handleLogin, loading, error }}>

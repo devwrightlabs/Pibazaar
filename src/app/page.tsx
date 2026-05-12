@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useStore } from '@/store/useStore'
-import { authenticateWithPi } from '@/lib/pi-sdk'
+import { usePiAuth } from '@/components/providers/PiAuthProvider'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -65,10 +65,9 @@ function FeedSkeleton() {
 /* ─── Home Page ─────────────────────────────────────────────────────────── */
 
 export default function HomePage() {
-  const { isAuthenticated, currentUser, setCurrentUser, mapRadius, setMapRadius } = useStore()
+  const { isAuthenticated, currentUser, mapRadius, setMapRadius } = useStore()
+  const { handleLogin, loading: authLoading, error: authError } = usePiAuth()
   const [refreshKey, setRefreshKey] = useState(0)
-  const [authLoading, setAuthLoading] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mapModalOpen, setMapModalOpen] = useState(false)
   const [pageReady, setPageReady] = useState(false)
@@ -84,54 +83,6 @@ export default function HomePage() {
     await new Promise<void>((r) => setTimeout(r, 800))
   }, [])
 
-  const handleLogin = async () => {
-    setAuthLoading(true)
-    setAuthError(null)
-    try {
-      const piAuth = await authenticateWithPi()
-      if (!piAuth) {
-        setAuthError('Pi Browser is required to log in.')
-        setAuthLoading(false)
-        return
-      }
-
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: piAuth.accessToken }),
-      })
-
-      if (!res.ok) {
-        setAuthError('Verification failed. Please try again.')
-        setAuthLoading(false)
-        return
-      }
-
-      const data = (await res.json()) as {
-        token: string
-        user: { pi_uid: string; username: string | null; avatar_url: string | null }
-      }
-
-      setCurrentUser({
-        id: data.user.pi_uid,
-        pi_uid: data.user.pi_uid,
-        username: data.user.username ?? 'Pioneer',
-        avatar_url: data.user.avatar_url ?? null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pibazaar-token', data.token)
-      }
-      setAuthLoading(false)
-    } catch (err) {
-      console.error('Pi login failed:', err)
-      setAuthError('Login failed. Please try again.')
-      setAuthLoading(false)
-    }
-  }
-
   const handleSidebarToggle = () => {
     setSidebarOpen((prev) => !prev)
   }
@@ -139,76 +90,123 @@ export default function HomePage() {
   return (
     <main className="min-h-screen min-w-[320px] bg-background">
       <PullToRefresh onRefresh={handleRefresh}>
-        {/* ── Sticky header ────────────────────────────────────────────── */}
-        <section
-          className="sticky top-0 z-40 px-4 py-4"
-          style={{ backgroundColor: 'var(--color-background)' }}
-        >
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            {/* Sidebar toggle */}
-            <button
-              onClick={handleSidebarToggle}
-              className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-              style={{ backgroundColor: 'var(--color-control-bg)' }}
-              aria-label="Open menu"
+        {/* ── Hero section (unauthenticated only) ─────────────────────── */}
+        {!isAuthenticated && (
+          <section
+            className="px-4 pt-10 pb-8 flex flex-col items-center text-center"
+            style={{ backgroundColor: 'var(--color-background)' }}
+          >
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: 'rgba(240, 192, 64, 0.15)' }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round">
-                <path d="M3 12h18M3 6h18M3 18h18" />
-              </svg>
-            </button>
-
-            {/* Title */}
-            <h1 className="text-xl sm:text-2xl font-bold font-heading" style={{ color: 'var(--color-text)' }}>
-              Trade with <span style={{ color: 'var(--color-gold)' }}>Pi</span>
+              <span className="text-3xl font-bold" style={{ color: 'var(--color-gold)' }}>π</span>
+            </div>
+            <h1
+              className="text-3xl sm:text-4xl font-bold font-heading mb-2"
+              style={{ color: 'var(--color-text)' }}
+            >
+              P2P Bazaar Marketplace
             </h1>
+            <p className="text-sm sm:text-base mb-8 max-w-xs sm:max-w-sm" style={{ color: 'var(--color-subtext)' }}>
+              Buy and sell locally with Pi — the decentralized marketplace built for Pioneers.
+            </p>
 
-            {/* Auth area */}
-            {authLoading ? (
-              <Skeleton shape="line" className="h-10 w-10 rounded-xl" />
-            ) : isAuthenticated && currentUser ? (
+            {/* Login / Sign Up buttons */}
+            <div className="flex items-center gap-3 w-full max-w-xs">
+              <button
+                onClick={() => void handleLogin()}
+                disabled={authLoading}
+                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
+                style={{
+                  backgroundColor: 'var(--color-control-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                {authLoading ? 'Loading…' : 'Login'}
+              </button>
+              <button
+                onClick={() => void handleLogin()}
+                disabled={authLoading}
+                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
+                style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
+              >
+                {authLoading ? 'Loading…' : 'Sign Up'}
+              </button>
+            </div>
+
+            {authError && (
+              <p className="mt-3 text-xs" style={{ color: 'var(--color-error)' }}>
+                {authError}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* ── Sticky header (when authenticated) ───────────────────────── */}
+        {isAuthenticated && (
+          <section
+            className="sticky top-0 z-40 px-4 py-4"
+            style={{ backgroundColor: 'var(--color-background)' }}
+          >
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+              {/* Sidebar toggle */}
               <button
                 onClick={handleSidebarToggle}
-                className="w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90"
-                style={{ backgroundColor: 'var(--color-gold)' }}
+                className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
+                style={{ backgroundColor: 'var(--color-control-bg)' }}
+                aria-label="Open menu"
               >
-                <span className="font-bold text-black text-sm">
-                  {(currentUser.username ?? 'P').charAt(0).toUpperCase()}
-                </span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round">
+                  <path d="M3 12h18M3 6h18M3 18h18" />
+                </svg>
               </button>
-            ) : (
-              <div className="flex flex-col items-end gap-1">
-                <Button size="sm" onClick={handleLogin}>
-                  Login
-                </Button>
-                {authError && (
-                  <p className="text-[10px]" style={{ color: 'var(--color-error)' }}>{authError}</p>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="mt-3 max-w-7xl mx-auto flex items-center gap-2">
-            <button
-              onClick={() => setDiscoveryView('list')}
-              className="rounded-xl px-4 py-2 text-sm font-semibold"
-              style={{
-                color: discoveryView === 'list' ? 'var(--color-text)' : 'var(--color-subtext)',
-                backgroundColor: discoveryView === 'list' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
-              }}
-            >
-              List
-            </button>
-            <button
-              onClick={() => setDiscoveryView('map')}
-              className="rounded-xl px-4 py-2 text-sm font-semibold"
-              style={{
-                color: discoveryView === 'map' ? 'var(--color-text)' : 'var(--color-subtext)',
-                backgroundColor: discoveryView === 'map' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
-              }}
-            >
-              Map
-            </button>
-          </div>
-        </section>
+
+              {/* Title */}
+              <h1 className="text-xl sm:text-2xl font-bold font-heading" style={{ color: 'var(--color-text)' }}>
+                Trade with <span style={{ color: 'var(--color-gold)' }}>Pi</span>
+              </h1>
+
+              {/* User avatar */}
+              {authLoading ? (
+                <Skeleton shape="line" className="h-10 w-10 rounded-xl" />
+              ) : currentUser ? (
+                <button
+                  onClick={handleSidebarToggle}
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90"
+                  style={{ backgroundColor: 'var(--color-gold)' }}
+                >
+                  <span className="font-bold text-black text-sm">
+                    {(currentUser.username ?? 'P').charAt(0).toUpperCase()}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-3 max-w-7xl mx-auto flex items-center gap-2">
+              <button
+                onClick={() => setDiscoveryView('list')}
+                className="rounded-xl px-4 py-2 text-sm font-semibold"
+                style={{
+                  color: discoveryView === 'list' ? 'var(--color-text)' : 'var(--color-subtext)',
+                  backgroundColor: discoveryView === 'list' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
+                }}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setDiscoveryView('map')}
+                className="rounded-xl px-4 py-2 text-sm font-semibold"
+                style={{
+                  color: discoveryView === 'map' ? 'var(--color-text)' : 'var(--color-subtext)',
+                  backgroundColor: discoveryView === 'map' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
+                }}
+              >
+                Map
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* ── Main content ─────────────────────────────────────────────── */}
         {!pageReady ? (
@@ -240,7 +238,7 @@ export default function HomePage() {
               <div className="rounded-2xl overflow-hidden">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={handleLogin}
+                  onLogin={() => void handleLogin()}
                   onExpand={() => setMapModalOpen(true)}
                   height="calc(100dvh - 300px)"
                   radius={mapRadius}
@@ -266,7 +264,7 @@ export default function HomePage() {
               <div className="lg:hidden mb-4">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={handleLogin}
+                  onLogin={() => void handleLogin()}
                   onExpand={() => setMapModalOpen(true)}
                   height="clamp(260px, 42dvh, 420px)"
                   radius={mapRadius}
@@ -284,7 +282,7 @@ export default function HomePage() {
               <div className="sticky top-20">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={handleLogin}
+                  onLogin={() => void handleLogin()}
                   onExpand={() => setMapModalOpen(true)}
                   height="400px"
                   radius={mapRadius}

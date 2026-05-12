@@ -48,7 +48,9 @@ interface VerifyRequestBody {
   user?: {
     uid: string
     username: string
+    wallet_address?: string
   }
+  wallet_address?: string
 }
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     // 1. Parse and validate input — accept both accessToken and user from Pi SDK.
     const body = await req.json() as VerifyRequestBody
-    const { accessToken } = body
+    const { accessToken, wallet_address: bodyWalletAddress } = body
 
     if (!accessToken || typeof accessToken !== 'string' || accessToken.trim() === '') {
       return NextResponse.json({ error: 'Missing or invalid accessToken' }, { status: 400 })
@@ -86,22 +88,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Invalid Pi API response: missing uid' }, { status: 502 })
     }
 
-    // 3. Upsert the verified user into the `profiles` table using the service
+    // Resolve wallet_address from request body (passed from Pi SDK user object).
+    const walletAddress: string | null =
+      (body.user?.wallet_address ?? bodyWalletAddress) || null
+
+    // 3. Check whether this is a new sign-up or an existing login.
+    //    We look up the user by pi_uid first so we can return the distinction
+    //    to the client (isNewUser). The upsert handles both cases atomically.
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('pi_uid', piUser.uid)
+      .maybeSingle()
+
+    const isNewUser = !existingUser
+
+    // 4. Upsert the verified user into the `users` table using the service
     //    role client (bypasses RLS — this is intentional for the auth route only).
-    //    Map `pi_uid` to the Pi user UID, update `username`, `avatar_url`, and
-    //    `last_login`.
+    //    For new users (Sign Up): inserts a full row including wallet_address.
+    //    For existing users (Login): updates username and wallet_address.
+    const upsertPayload: Record<string, unknown> = {
+      pi_uid: piUser.uid,
+      username: piUser.username ?? 'Pioneer',
+      avatar_url: '',
+      wallet_address: walletAddress ?? null,
+      updated_at: new Date().toISOString(),
+    }
+
     const { data: dbUser, error: upsertError } = await supabaseAdmin
-      .from('profiles')
-      .upsert(
-        {
-          pi_uid: piUser.uid,
-          username: piUser.username ?? 'Pioneer',
-          avatar_url: '',
-          last_login: new Date().toISOString(),
-        },
-        { onConflict: 'pi_uid' }
-      )
-      .select('id, pi_uid, username, avatar_url')
+      .from('users')
+      .upsert(upsertPayload, { onConflict: 'pi_uid' })
+      .select('id, pi_uid, username, avatar_url, wallet_address')
       .single()
 
     if (upsertError || !dbUser) {
@@ -109,7 +126,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Failed to persist user' }, { status: 500 })
     }
 
-    // 4. Mint a custom Supabase-compatible JWT.
+    // 5. Mint a custom Supabase-compatible JWT.
     //    The JWT includes a `pi_uid` custom claim that RLS policies read via
     //    `auth.jwt() ->> 'pi_uid'`. Supabase validates the signature using
     //    SUPABASE_JWT_SECRET, so this claim cannot be forged by clients.
@@ -140,13 +157,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const customToken = jwt.sign(payload, jwtSecret)
 
-    // 5. Return the token and basic user info.
+    // 6. Return the token, basic user info, and whether this was a new sign-up.
     return NextResponse.json({
       token: customToken,
+      isNewUser,
       user: {
         pi_uid: dbUser.pi_uid,
         username: dbUser.username ?? null,
         avatar_url: dbUser.avatar_url ?? null,
+        wallet_address: (dbUser as { wallet_address?: string | null }).wallet_address ?? null,
       },
     })
   } catch (error) {
