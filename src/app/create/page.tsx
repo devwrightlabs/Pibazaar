@@ -181,7 +181,16 @@ export default function CreateListingPage() {
     }
   }
 
-  const canPublish = validate() === null && !publishing
+  const canPublish =
+    Boolean(currentUser) &&
+    piWalletConnected &&
+    form.title.trim().length > 0 &&
+    form.price_in_pi > 0 &&
+    form.category.length > 0 &&
+    form.description.trim().length > 0 &&
+    form.images.length > 0 &&
+    form.fast_seller_agreed &&
+    !publishing
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>

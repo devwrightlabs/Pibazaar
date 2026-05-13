@@ -282,7 +282,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
           </p>
         )}
         {!piWalletConnected && (
-          <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }}>
+          <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }} aria-live="polite">
             Connect your Pi wallet to enable payment.
           </p>
         )}
