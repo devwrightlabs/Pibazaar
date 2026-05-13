@@ -76,7 +76,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             pi_username: null,
             pi_wallet_address: null,
             wallet_address: null,
-          } as never,
+          },
           { onConflict: 'id' }
         )
 

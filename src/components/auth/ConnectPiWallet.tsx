@@ -70,7 +70,7 @@ export default function ConnectPiWallet({ title, description, onConnected, onSta
     return () => {
       mounted = false
     }
-  }, [])
+  }, [onStatusChange])
 
   const handleConnect = async () => {
     setConnecting(true)

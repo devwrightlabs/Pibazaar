@@ -117,7 +117,7 @@ export default function SignupPage() {
           Create account
         </h1>
         <p className="mt-2 text-sm" style={{ color: '#C8C8C8' }}>
-          Sign up with a username and password only.
+          Sign up with just a username and password.
         </p>
 
         <form className="mt-7 space-y-4" onSubmit={(e) => void handleSubmit(e)}>

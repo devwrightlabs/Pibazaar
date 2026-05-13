@@ -30,9 +30,33 @@ END
 $$;
 
 -- Ensure optional Pi columns are explicitly nullable for deferred wallet connection.
-ALTER TABLE public.users
-  ALTER COLUMN pi_username DROP NOT NULL,
-  ALTER COLUMN pi_wallet_address DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'pi_username'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.users ALTER COLUMN pi_username DROP NOT NULL;
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'pi_wallet_address'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.users ALTER COLUMN pi_wallet_address DROP NOT NULL;
+  END IF;
+END
+$$;
 
 -- Username-based accounts rely on unique platform usernames.
 DO $$
