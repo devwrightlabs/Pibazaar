@@ -127,6 +127,8 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       // 3. Save the JWT to localStorage.
       if (typeof window !== 'undefined') {
         localStorage.setItem('pibazaar-token', data.token)
+        // Set cookie for middleware access if needed
+        document.cookie = `pibazaar-token=${data.token}; path=/; max-age=3600; SameSite=Lax`;
       }
 
       // 4. Update the Zustand store.

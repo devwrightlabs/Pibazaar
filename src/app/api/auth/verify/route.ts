@@ -116,20 +116,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //
     //    is_verified is required (NOT NULL) — preserve the existing value on
     //    re-login and default to false for brand-new accounts.
-    const typedExistingUser = existingUser as ExistingUser | null
     const upsertPayload: Record<string, unknown> = {
       pi_uid: piUser.uid,
       username: piUser.username ?? 'Pioneer',
-      avatar_url: null,
       wallet_address: walletAddress ?? null,
       updated_at: new Date().toISOString(),
       is_verified: typedExistingUser?.is_verified ?? false,
     }
 
+    // Include avatar_url only if it exists in the schema (fallback for PGRST204)
+    if (typedExistingUser && 'avatar_url' in typedExistingUser) {
+      upsertPayload.avatar_url = null;
+    }
+
     const { data: dbUser, error: upsertError } = await supabaseAdmin
       .from('users')
       .upsert(upsertPayload, { onConflict: 'pi_uid' })
-      .select('id, pi_uid, username, avatar_url, wallet_address')
+      .select('id, pi_uid, username, wallet_address')
       .single()
 
     if (upsertError || !dbUser) {
