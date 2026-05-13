@@ -41,11 +41,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .eq('pi_uid', authUser.id)
       .maybeSingle()
 
-    const fallbackUsername = existingUser?.username
+    const fallbackUsernameBase = existingUser?.username
       || requestedUsername
       || metadataUsername
       || authUser.email?.split('@')[0]
       || 'Pioneer'
+    const fallbackUsername = fallbackUsernameBase === 'Pioneer'
+      ? `Pioneer-${authUser.id.slice(0, 8)}`
+      : fallbackUsernameBase
 
     const { data: dbUser, error: upsertError } = await supabaseAdmin
       .from('users')
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
         { onConflict: 'pi_uid' }
       )
-      .select('id, pi_uid, username, avatar_url')
+      .select('id, pi_uid, username, avatar_url, created_at')
       .single()
 
     if (upsertError || !dbUser) {
@@ -69,6 +72,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const jwtSecret = process.env.SUPABASE_JWT_SECRET
     const issuer = process.env.SUPABASE_URL
     if (!jwtSecret || !issuer) {
+      console.error('[auth/session] Missing required env:', {
+        hasJwtSecret: Boolean(jwtSecret),
+        hasSupabaseUrl: Boolean(issuer),
+      })
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
@@ -91,6 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         pi_uid: dbUser.pi_uid,
         username: dbUser.username ?? null,
         avatar_url: dbUser.avatar_url ?? null,
+        created_at: (dbUser as { created_at?: string | null }).created_at ?? null,
       },
     })
   } catch (error) {

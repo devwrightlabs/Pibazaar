@@ -57,6 +57,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         pi_uid: string
         username: string | null
         avatar_url: string | null
+        created_at: string | null
       }
     }
 
@@ -71,7 +72,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       username: data.user.username ?? 'Pioneer',
       avatar_url: data.user.avatar_url,
       bio: null,
-      created_at: new Date().toISOString(),
+      created_at: data.user.created_at ?? new Date().toISOString(),
     })
   }, [setCurrentUser])
 

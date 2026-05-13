@@ -86,7 +86,7 @@ export default function LoginPage() {
         }
 
         if (!data.session?.access_token) {
-          setMessage('Account created. Please verify your email, then sign in.')
+          setMessage('Account created. If email verification is enabled, check your inbox before signing in.')
           setMode('login')
           return
         }

@@ -39,6 +39,25 @@ export default function ConnectPiWalletToPay({
         return
       }
 
+      const token = typeof window !== 'undefined' ? localStorage.getItem('pibazaar-token') : null
+      const response = await fetch('/api/auth/link-wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          accessToken: auth.accessToken,
+          walletAddress: auth.user?.wallet_address ?? null,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string }
+        setError(payload.error ?? 'Wallet connected but could not be linked to your account.')
+        return
+      }
+
       onConnected()
     } catch (err) {
       console.error('[ConnectPiWalletToPay] Wallet connect failed:', err)
