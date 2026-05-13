@@ -11,6 +11,7 @@ import ShippingAddressForm from '@/components/ShippingAddressForm'
 import ShippingSelector from '@/components/ShippingSelector'
 import PiPayButton from '@/components/PiPayButton'
 import { useStore } from '@/store/useStore'
+import ConnectPiWallet from '@/components/auth/ConnectPiWallet'
 
 interface CheckoutContentProps {
   listingId: string
@@ -28,6 +29,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
   const [paymentId, setPaymentId] = useState<string | null>(null)
   const [escrowId, setEscrowId] = useState<string | null>(null)
   const [creatingEscrow, setCreatingEscrow] = useState(false)
+  const [piWalletConnected, setPiWalletConnected] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -133,8 +135,8 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
     )
   }
 
-  const readyToPay = (!isPhysical || selectedAddress !== null) && escrowId !== null
-  const canInitiatePayment = !isPhysical || selectedAddress !== null
+  const readyToPay = (!isPhysical || selectedAddress !== null) && escrowId !== null && piWalletConnected
+  const canInitiatePayment = (!isPhysical || selectedAddress !== null) && piWalletConnected
 
   return (
     <main className="min-h-screen pb-8" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -212,6 +214,12 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
         {/* Payment breakdown */}
         <PaymentBreakdown amountPi={listing.price_in_pi} />
 
+        <ConnectPiWallet
+          title="Connect Pi Wallet to Pay"
+          description="Wallet connection is required only when you initiate a transaction."
+          onStatusChange={setPiWalletConnected}
+        />
+
         {/* Escrow protection info */}
         <div className="rounded-xl p-4" style={{ backgroundColor: '#0D1B2A', border: '1px solid rgba(240,192,64,0.2)' }}>
           <p className="text-sm font-semibold mb-1" style={{ color: '#F0C040' }}>
@@ -263,7 +271,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
         ) : (
           <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--color-card-bg)' }}>
             <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
-              Please sign in with your Pi account to continue.
+              Please sign in to continue.
             </p>
           </div>
         )}
@@ -271,6 +279,11 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
         {isPhysical && !selectedAddress && (
           <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }}>
             Please enter a shipping address to enable payment.
+          </p>
+        )}
+        {!piWalletConnected && (
+          <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }} aria-live="polite">
+            Connect your Pi wallet to enable payment.
           </p>
         )}
       </div>

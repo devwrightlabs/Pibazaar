@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useStore } from '@/store/useStore'
-import { usePiAuth } from '@/components/providers/PiAuthProvider'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import MarketplaceFeed from '@/components/marketplace/MarketplaceFeed'
 import PullToRefresh from '@/components/marketplace/PullToRefresh'
@@ -65,8 +64,8 @@ function FeedSkeleton() {
 /* ─── Home Page ─────────────────────────────────────────────────────────── */
 
 export default function HomePage() {
+  const router = useRouter()
   const { isAuthenticated, currentUser, mapRadius, setMapRadius } = useStore()
-  const { handleLogin, loading: authLoading, error: authError } = usePiAuth()
   const [refreshKey, setRefreshKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mapModalOpen, setMapModalOpen] = useState(false)
@@ -115,32 +114,24 @@ export default function HomePage() {
             {/* Login / Sign Up buttons */}
             <div className="flex items-center gap-3 w-full max-w-xs">
               <button
-                onClick={() => void handleLogin()}
-                disabled={authLoading}
-                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
+                onClick={() => router.push('/login')}
+                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95"
                 style={{
                   backgroundColor: 'var(--color-control-bg)',
                   color: 'var(--color-text)',
                   border: '1px solid var(--color-border)',
                 }}
               >
-                {authLoading ? 'Loading…' : 'Login'}
+                Login
               </button>
               <button
-                onClick={() => void handleLogin()}
-                disabled={authLoading}
-                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
+                onClick={() => router.push('/signup')}
+                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95"
                 style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
               >
-                {authLoading ? 'Loading…' : 'Sign Up'}
+                Sign Up
               </button>
             </div>
-
-            {authError && (
-              <p className="mt-3 text-xs" style={{ color: 'var(--color-error)' }}>
-                {authError}
-              </p>
-            )}
           </section>
         )}
 
@@ -169,9 +160,7 @@ export default function HomePage() {
               </h1>
 
               {/* User avatar */}
-              {authLoading ? (
-                <Skeleton shape="line" className="h-10 w-10 rounded-xl" />
-              ) : currentUser ? (
+              {currentUser ? (
                 <button
                   onClick={handleSidebarToggle}
                   className="w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90"
@@ -238,7 +227,7 @@ export default function HomePage() {
               <div className="rounded-2xl overflow-hidden">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={() => void handleLogin()}
+                  onLogin={() => router.push('/login')}
                   onExpand={() => setMapModalOpen(true)}
                   height="calc(100dvh - 300px)"
                   radius={mapRadius}
@@ -264,7 +253,7 @@ export default function HomePage() {
               <div className="lg:hidden mb-4">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={() => void handleLogin()}
+                  onLogin={() => router.push('/login')}
                   onExpand={() => setMapModalOpen(true)}
                   height="clamp(260px, 42dvh, 420px)"
                   radius={mapRadius}
@@ -282,7 +271,7 @@ export default function HomePage() {
               <div className="sticky top-20">
                 <MapWidget
                   isAuthenticated={isAuthenticated}
-                  onLogin={() => void handleLogin()}
+                  onLogin={() => router.push('/login')}
                   onExpand={() => setMapModalOpen(true)}
                   height="400px"
                   radius={mapRadius}
@@ -341,10 +330,10 @@ function MapWidget({ isAuthenticated, onLogin, onExpand, height, radius }: MapWi
             </svg>
           </div>
           <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
-            Connect Pi Wallet to view Local Sellers
+            Sign in to view Local Sellers
           </p>
           <Button size="sm" onClick={onLogin}>
-            Connect Wallet
+            Login
           </Button>
         </div>
       </div>
