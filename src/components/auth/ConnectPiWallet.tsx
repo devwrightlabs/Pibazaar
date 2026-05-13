@@ -170,7 +170,7 @@ export default function ConnectPiWallet({ title, description, onConnected, onSta
 
       {connected ? (
         <div className="mt-3 rounded-lg border p-3 text-sm" style={{ borderColor: 'rgba(34,197,94,0.4)', color: '#86EFAC' }}>
-          Connected as @{piUsername ?? 'pi-user'}
+          Connected as @{piUsername}
           {walletAddress ? <div className="mt-1 break-all">{walletAddress}</div> : null}
         </div>
       ) : (
