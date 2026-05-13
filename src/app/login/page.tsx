@@ -125,7 +125,7 @@ export default function LoginPage() {
           Login
         </h1>
         <p className="mt-2 text-sm" style={{ color: '#C8C8C8' }}>
-          Access your P2P Bazaar account.
+          Access your Pi Bazaar account.
         </p>
 
         <form className="mt-7 space-y-4" onSubmit={(e) => void handleSubmit(e)}>

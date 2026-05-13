@@ -25,12 +25,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const password = body.password ?? ''
 
     if (!isValidUsername(normalizedUsername)) {
-      return NextResponse.json({ error: 'Invalid username or password.' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 })
     }
 
     const passwordError = validatePassword(password)
     if (passwordError) {
-      return NextResponse.json({ error: 'Invalid username or password.' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 })
     }
 
     if (!supabaseUrl || !supabaseServiceRoleKey || !supabaseAnonKey) {
