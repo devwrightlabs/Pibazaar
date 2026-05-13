@@ -159,16 +159,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const customToken = jwt.sign(payload, jwtSecret)
+    const persistedUser = dbUser as { id: string; pi_username: string | null; wallet_address: string | null }
 
     // 6. Return the token, basic user info, and whether this was a new sign-up.
     return NextResponse.json({
       token: customToken,
       isNewUser,
       user: {
-        pi_uid: dbUser.id,
-        username: (dbUser as { pi_username?: string | null }).pi_username ?? null,
+        pi_uid: persistedUser.id,
+        username: persistedUser.pi_username ?? null,
         avatar_url: null,
-        wallet_address: (dbUser as { wallet_address?: string | null }).wallet_address ?? null,
+        wallet_address: persistedUser.wallet_address ?? null,
       },
     })
   } catch (error) {
