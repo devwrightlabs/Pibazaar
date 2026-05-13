@@ -6,9 +6,9 @@
  * Flow:
  *   1. Receive `{ accessToken, user }` from the client (obtained via Pi SDK).
  *   2. Verify the token with the Pi Network Developer API (server-to-server).
- *   3. Upsert the verified user into the `profiles` table via the service role
- *      client, mapping `pi_uid` to the Pi user UID and updating `username`,
- *      `avatar_url`, and `last_login`.
+ *   3. Upsert the verified user into the `users` table via the service role
+ *      client, mapping `id` to the Pi user UID and updating `pi_username`
+ *      and `wallet_address`.
  *   4. Mint a custom Supabase-compatible JWT containing the `pi_uid` claim.
  *   5. Return `{ token, user }` to the client.
  *
@@ -41,11 +41,6 @@ import type { AuthPayload } from '@/lib/authHelper'
 interface PiMeResponse {
   uid: string
   username: string
-}
-
-interface ExistingUser {
-  id: string
-  is_verified: boolean
 }
 
 interface VerifyRequestBody {
@@ -98,38 +93,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       (body.user?.wallet_address ?? bodyWalletAddress) || null
 
     // 3. Check whether this is a new sign-up or an existing login.
-    //    We look up the user by pi_uid first so we can return the distinction
+    //    We look up the user by id first so we can return the distinction
     //    to the client (isNewUser). The upsert handles both cases atomically.
-    //    We also fetch is_verified so it is never reset to false on re-login.
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id, is_verified')
-      .eq('pi_uid', piUser.uid)
+      .select('id')
+      .eq('id', piUser.uid)
       .maybeSingle()
 
     const isNewUser = !existingUser
 
     // 4. Upsert the verified user into the `users` table using the service
     //    role client (bypasses RLS — this is intentional for the auth route only).
-    //    For new users (Sign Up): inserts a full row including wallet_address.
-    //    For existing users (Login): updates username and wallet_address.
-    //
-    //    is_verified is required (NOT NULL) — preserve the existing value on
-    //    re-login and default to false for brand-new accounts.
-    const typedExistingUser = existingUser as ExistingUser | null
+    //    For new users (Sign Up): inserts the required auth profile fields.
+    //    For existing users (Login): updates pi_username and wallet_address.
     const upsertPayload: Record<string, unknown> = {
-      pi_uid: piUser.uid,
-      username: piUser.username ?? 'Pioneer',
-      avatar_url: null,
+      id: piUser.uid,
+      pi_username: piUser.username ?? 'Pioneer',
       wallet_address: walletAddress ?? null,
-      updated_at: new Date().toISOString(),
-      is_verified: typedExistingUser?.is_verified ?? false,
     }
 
     const { data: dbUser, error: upsertError } = await supabaseAdmin
       .from('users')
-      .upsert(upsertPayload, { onConflict: 'pi_uid' })
-      .select('id, pi_uid, username, avatar_url, wallet_address')
+      .upsert(upsertPayload, { onConflict: 'id' })
+      .select('id, pi_username, wallet_address')
       .single()
 
     if (upsertError || !dbUser) {
@@ -163,7 +150,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const payload: Omit<AuthPayload, 'iat' | 'exp'> & { iat: number; exp: number } = {
       sub: dbUser.id,            // Supabase user UUID
-      pi_uid: dbUser.pi_uid,     // Custom claim — read by RLS policies
+      pi_uid: dbUser.id,         // Custom claim — read by RLS policies
       role: 'authenticated',     // Required by Supabase RLS role checks
       aud: 'authenticated',      // Required audience
       iss: supabaseUrl,          // Issuer — Supabase project URL
@@ -178,9 +165,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       token: customToken,
       isNewUser,
       user: {
-        pi_uid: dbUser.pi_uid,
-        username: dbUser.username ?? null,
-        avatar_url: dbUser.avatar_url ?? null,
+        pi_uid: dbUser.id,
+        username: (dbUser as { pi_username?: string | null }).pi_username ?? null,
+        avatar_url: null,
         wallet_address: (dbUser as { wallet_address?: string | null }).wallet_address ?? null,
       },
     })
