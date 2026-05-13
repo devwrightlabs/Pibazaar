@@ -17,6 +17,14 @@ interface StatusResponse {
   error?: string
 }
 
+async function parseStatusResponse(response: Response): Promise<StatusResponse | null> {
+  try {
+    return (await response.json()) as StatusResponse
+  } catch {
+    return null
+  }
+}
+
 export default function ConnectPiWallet({ title, description, onConnected, onStatusChange }: ConnectPiWalletProps) {
   const [loadingStatus, setLoadingStatus] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -40,17 +48,17 @@ export default function ConnectPiWallet({ title, description, onConnected, onSta
           headers: { Authorization: `Bearer ${token}` },
         })
 
-        const data = (await response.json().catch(() => ({}))) as StatusResponse
+        const data = await parseStatusResponse(response)
 
         if (!response.ok) {
           if (mounted) {
-            setError(data.error ?? 'Could not load Pi wallet status.')
+            setError(data?.error ?? 'Could not load Pi wallet status.')
             setLoadingStatus(false)
           }
           return
         }
 
-        if (!mounted) return
+        if (!mounted || !data) return
 
         setConnected(data.connected)
         setPiUsername(data.pi_username)
@@ -105,10 +113,16 @@ export default function ConnectPiWallet({ title, description, onConnected, onSta
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as StatusResponse
+      const data = await parseStatusResponse(response)
 
       if (!response.ok) {
-        setError(data.error ?? 'Could not connect Pi wallet.')
+        setError(data?.error ?? 'Could not connect Pi wallet.')
+        setConnecting(false)
+        return
+      }
+
+      if (!data) {
+        setError('Could not connect Pi wallet.')
         setConnecting(false)
         return
       }

@@ -19,6 +19,14 @@ interface AuthApiResponse {
   error?: string
 }
 
+async function parseAuthApiResponse(response: Response): Promise<AuthApiResponse | null> {
+  try {
+    return (await response.json()) as AuthApiResponse
+  } catch {
+    return null
+  }
+}
+
 function AuthToast({ message }: { message: string }) {
   return (
     <div
@@ -56,10 +64,10 @@ export default function SignupPage() {
         body: JSON.stringify({ username, password }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as AuthApiResponse
+      const data = await parseAuthApiResponse(response)
 
-      if (!response.ok || !data.session || !data.user) {
-        setErrorToast(data.error ?? 'Sign up failed. Please try again.')
+      if (!response.ok || !data?.session || !data.user) {
+        setErrorToast(data?.error ?? 'Sign up failed. Please try again.')
         setLoading(false)
         return
       }

@@ -1,4 +1,4 @@
-export const USERNAME_EMAIL_DOMAIN = 'p2pbazaar.local'
+export const USERNAME_EMAIL_DOMAIN = 'pibazaar.local'
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,24}$/
 

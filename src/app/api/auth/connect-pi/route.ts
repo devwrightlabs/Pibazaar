@@ -30,7 +30,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Failed to load Pi wallet status.' }, { status: 500 })
   }
 
-  const connected = Boolean(userRow?.pi_username && userRow?.pi_wallet_address)
+  const connected = Boolean(userRow?.pi_username)
 
   return NextResponse.json({
     connected,

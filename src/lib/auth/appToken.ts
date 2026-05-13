@@ -17,6 +17,7 @@ export function createAppToken({ userId }: CreateAppTokenInput): string {
   return jwt.sign(
     {
       sub: userId,
+      // Backward compatibility: existing protected API routes still authorize via `pi_uid`.
       pi_uid: userId,
       role: 'authenticated',
       aud: 'authenticated',

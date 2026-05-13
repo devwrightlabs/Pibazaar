@@ -70,7 +70,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
 
     if (createUserError || !createdAuthUser.user) {
-      if (createUserError?.message.toLowerCase().includes('already')) {
+      if (createUserError?.code === 'email_exists' || createUserError?.status === 422) {
         return NextResponse.json({ error: 'Username is already taken.' }, { status: 409 })
       }
 

@@ -94,6 +94,7 @@ export default function CreateListingPage() {
   }
 
   const validate = (): string | null => {
+    if (!piWalletConnected) return 'Connect your Pi Wallet before publishing a listing'
     if (!form.title.trim()) return 'Title is required'
     if (form.price_in_pi <= 0) return 'Price must be greater than 0'
     if (!form.category) return 'Please select a category'
@@ -109,15 +110,6 @@ export default function CreateListingPage() {
       openModal({
         title: 'Not logged in',
         message: 'Please log in before publishing a listing.',
-        variant: 'alert',
-      })
-      return
-    }
-
-    if (!piWalletConnected) {
-      openModal({
-        title: 'Pi wallet required',
-        message: 'Connect your Pi Wallet before publishing a listing.',
         variant: 'alert',
       })
       return
@@ -189,15 +181,7 @@ export default function CreateListingPage() {
     }
   }
 
-  const canPublish =
-    form.title.trim().length > 0 &&
-    form.price_in_pi > 0 &&
-    form.category.length > 0 &&
-    form.description.trim().length > 0 &&
-    form.images.length > 0 &&
-    form.fast_seller_agreed &&
-    !publishing &&
-    piWalletConnected
+  const canPublish = validate() === null && !publishing
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
