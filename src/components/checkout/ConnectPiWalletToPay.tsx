@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Script from 'next/script'
 import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
 
@@ -13,9 +13,15 @@ export default function ConnectPiWalletToPay({
   onConnected,
   disabled = false,
 }: ConnectPiWalletToPayProps) {
-  const [sdkLoaded, setSdkLoaded] = useState<boolean>(typeof window !== 'undefined' && Boolean(window.Pi))
+  const [sdkLoaded, setSdkLoaded] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.Pi) {
+      setSdkLoaded(true)
+    }
+  }, [])
 
   const handleConnect = async () => {
     if (disabled || connecting) return
@@ -63,7 +69,7 @@ export default function ConnectPiWalletToPay({
           opacity: disabled || connecting || !sdkLoaded ? 0.7 : 1,
         }}
       >
-        {connecting ? 'Connecting Pi Wallet…' : !sdkLoaded ? 'Loading Pi Wallet…' : 'Connect Pi Wallet to Pay'}
+        {connecting ? 'Connecting Pi Wallet...' : !sdkLoaded ? 'Loading Pi Wallet...' : 'Connect Pi Wallet to Pay'}
       </button>
 
       {error && (
@@ -74,4 +80,3 @@ export default function ConnectPiWalletToPay({
     </div>
   )
 }
-

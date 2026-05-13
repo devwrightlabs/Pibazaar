@@ -100,28 +100,30 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
     void bootstrap()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      void (async () => {
-        setLoading(true)
-        setError(null)
-        try {
-          if (session?.access_token) {
-            await syncSession(session.access_token)
-          } else {
-            clearClientAuth()
-          }
-        } catch (err) {
-          console.error('[PiAuthProvider] Auth state sync failed:', err)
+    const handleAuthStateChange = async (accessToken: string | undefined) => {
+      setLoading(true)
+      setError(null)
+      try {
+        if (accessToken) {
+          await syncSession(accessToken)
+        } else {
           clearClientAuth()
-          if (isMounted) {
-            setError('Authentication sync failed. Please sign in again.')
-          }
-        } finally {
-          if (isMounted) {
-            setLoading(false)
-          }
         }
-      })
+      } catch (err) {
+        console.error('[PiAuthProvider] Auth state sync failed:', err)
+        clearClientAuth()
+        if (isMounted) {
+          setError('Authentication sync failed. Please sign in again.')
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      void handleAuthStateChange(session?.access_token)
     })
 
     return () => {

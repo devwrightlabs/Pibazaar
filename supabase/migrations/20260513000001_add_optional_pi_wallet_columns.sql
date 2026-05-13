@@ -26,8 +26,3 @@ BEGIN
   END IF;
 END
 $$;
-
-ALTER TABLE public.users
-  ALTER COLUMN pi_wallet_address DROP NOT NULL,
-  ALTER COLUMN pi_username DROP NOT NULL;
-

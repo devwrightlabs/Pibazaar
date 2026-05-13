@@ -30,22 +30,26 @@ export default function LoginPage() {
     return clean
   }
 
-  const syncSession = async (accessToken: string, preferredUsername: string) => {
+  const syncSession = async (accessToken: string, preferredUsername?: string) => {
     const response = await fetch('/api/auth/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         accessToken,
-        username: preferredUsername,
+        ...(preferredUsername ? { username: preferredUsername } : {}),
       }),
     })
 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({})) as { error?: string }
-      throw new Error(payload.error ?? 'Failed to initialize user session.')
+      const statusMessage = response.status ? ` (HTTP ${response.status})` : ''
+      throw new Error(payload.error ?? `Failed to initialize user session${statusMessage}.`)
     }
 
-    const payload = await response.json() as { token: string }
+    const payload = await response.json().catch(() => null) as { token: string } | null
+    if (!payload?.token) {
+      throw new Error('Session setup failed: invalid server response.')
+    }
     if (typeof window !== 'undefined') {
       localStorage.setItem('pibazaar-token', payload.token)
       document.cookie = `pibazaar-token=${payload.token}; path=/; max-age=3600; SameSite=Lax`
@@ -108,7 +112,7 @@ export default function LoginPage() {
         return
       }
 
-      await syncSession(data.session.access_token, preferredUsername)
+      await syncSession(data.session.access_token)
       router.push('/')
       router.refresh()
     } catch (err) {
@@ -213,7 +217,7 @@ export default function LoginPage() {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? 'Please wait…' : mode === 'login' ? 'Login' : 'Create Account'}
+            {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'}
           </button>
         </div>
 

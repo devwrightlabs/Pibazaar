@@ -30,8 +30,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const authUser = authData.user
-    const fallbackUsername = requestedUsername
-      || (typeof authUser.user_metadata?.username === 'string' ? authUser.user_metadata.username : null)
+    const metadataUsername =
+      typeof authUser.user_metadata?.username === 'string'
+        ? authUser.user_metadata.username
+        : null
+
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('username')
+      .eq('pi_uid', authUser.id)
+      .maybeSingle()
+
+    const fallbackUsername = existingUser?.username
+      || requestedUsername
+      || metadataUsername
       || authUser.email?.split('@')[0]
       || 'Pioneer'
 
@@ -86,4 +98,3 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
