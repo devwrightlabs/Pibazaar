@@ -144,7 +144,12 @@ export default function ConnectPiWallet({ title, description, onConnected, onSta
 
   if (loadingStatus) {
     return (
-      <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(240,192,64,0.2)', backgroundColor: '#12121c' }}>
+      <div
+        className="rounded-xl border p-4"
+        style={{ borderColor: 'rgba(240,192,64,0.2)', backgroundColor: '#12121c' }}
+        role="status"
+        aria-live="polite"
+      >
         <div className="inline-flex items-center gap-2 text-sm" style={{ color: '#F0C040' }}>
           <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
           Checking Pi wallet status...
