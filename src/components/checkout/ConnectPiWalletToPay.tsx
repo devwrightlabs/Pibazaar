@@ -1,0 +1,77 @@
+'use client'
+
+import { useState } from 'react'
+import Script from 'next/script'
+import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
+
+interface ConnectPiWalletToPayProps {
+  onConnected: () => void
+  disabled?: boolean
+}
+
+export default function ConnectPiWalletToPay({
+  onConnected,
+  disabled = false,
+}: ConnectPiWalletToPayProps) {
+  const [sdkLoaded, setSdkLoaded] = useState<boolean>(typeof window !== 'undefined' && Boolean(window.Pi))
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleConnect = async () => {
+    if (disabled || connecting) return
+    setConnecting(true)
+    setError(null)
+    try {
+      if (!initPiSdk()) {
+        setError('Pi SDK is unavailable. Please refresh and try again.')
+        return
+      }
+
+      const auth = await authenticateWithPi()
+      if (!auth?.accessToken) {
+        setError('Pi Wallet connection failed. Please try again.')
+        return
+      }
+
+      onConnected()
+    } catch (err) {
+      console.error('[ConnectPiWalletToPay] Wallet connect failed:', err)
+      setError('Could not connect Pi Wallet.')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {!sdkLoaded && (
+        <Script
+          src="https://sdk.minepi.com/pi-sdk.js"
+          strategy="afterInteractive"
+          onLoad={() => setSdkLoaded(true)}
+        />
+      )}
+
+      <button
+        onClick={() => void handleConnect()}
+        disabled={disabled || connecting || !sdkLoaded}
+        className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-3 transition-opacity"
+        style={{
+          backgroundColor: 'var(--color-control-bg)',
+          color: 'var(--color-text)',
+          border: '1px solid var(--color-border)',
+          opacity: disabled || connecting || !sdkLoaded ? 0.7 : 1,
+        }}
+      >
+        {connecting ? 'Connecting Pi Wallet…' : !sdkLoaded ? 'Loading Pi Wallet…' : 'Connect Pi Wallet to Pay'}
+      </button>
+
+      {error && (
+        <p className="text-xs text-center" style={{ color: 'var(--color-error)' }}>
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+

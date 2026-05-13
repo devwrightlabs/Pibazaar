@@ -67,9 +67,9 @@ export default function Navbar() {
               <Button
                 size="sm"
                 onClick={() => void handleLogin()}
-                aria-label="Connect wallet"
+                aria-label="Sign in"
               >
-                Connect Wallet
+                Sign In
               </Button>
               {error && (
                 <span className="text-[10px] text-error">{error}</span>

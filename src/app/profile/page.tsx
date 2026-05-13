@@ -1,44 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { authenticateWithPi } from '@/lib/pi-sdk'
-import { supabase } from '@/lib/supabase'
-import type { UserProfile } from '@/lib/types'
-import LoadingSkeleton from '@/components/LoadingSkeleton'
+import { useRouter } from 'next/navigation'
+import { useStore } from '@/store/useStore'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import VerifiedBadge from '@/components/VerifiedBadge'
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [connecting, setConnecting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleConnect = async () => {
-    setConnecting(true)
-    setError(null)
-    try {
-      const auth = await authenticateWithPi()
-      if (auth) {
-        const { data, error: upsertError } = await supabase
-          .from('user_profiles')
-          .upsert({
-            pi_uid: auth.user.uid,
-            username: auth.user.username,
-          })
-          .select()
-          .single()
-        if (upsertError) throw upsertError
-        if (data) {
-          setProfile(data as UserProfile)
-        }
-      }
-    } catch (err) {
-      console.error('Connect failed:', err)
-      setError('Failed to connect Pi Wallet. Please try again.')
-    } finally {
-      setConnecting(false)
-    }
-  }
+  const router = useRouter()
+  const { currentUser, isAuthenticated } = useStore()
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -50,9 +19,7 @@ export default function ProfilePage() {
           Profile
         </h1>
         <ErrorBoundary>
-          {connecting ? (
-            <LoadingSkeleton rows={3} variant="rows" />
-          ) : profile ? (
+          {isAuthenticated && currentUser ? (
             <div
               className="rounded-2xl p-6 text-center"
               style={{ backgroundColor: 'var(--color-card-bg)' }}
@@ -61,24 +28,26 @@ export default function ProfilePage() {
                 className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl overflow-hidden"
                 style={{ backgroundColor: 'var(--color-secondary-bg)' }}
               >
-                {profile.avatar_url ? (
-                  <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
+                {currentUser.avatar_url ? (
+                  <img src={currentUser.avatar_url} alt={currentUser.username} className="w-full h-full object-cover" />
                 ) : (
-                  <span></span>
+                  <span className="font-bold text-2xl" style={{ color: 'var(--color-gold)' }}>
+                    {(currentUser.username ?? 'P').charAt(0).toUpperCase()}
+                  </span>
                 )}
               </div>
               <h2
                 className="text-xl font-bold mb-2"
                 style={{ fontFamily: 'Sora, sans-serif', color: '#ffffff' }}
               >
-                @{profile.username}
+                @{currentUser.username}
               </h2>
               <div className="flex justify-center mb-2">
                 <VerifiedBadge size="md" />
               </div>
-              {profile.bio && (
+              {currentUser.bio && (
                 <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
-                  {profile.bio}
+                  {currentUser.bio}
                 </p>
               )}
             </div>
@@ -95,24 +64,18 @@ export default function ProfilePage() {
                 className="text-xl font-bold mb-3"
                 style={{ fontFamily: 'Sora, sans-serif', color: '#ffffff' }}
               >
-                Connect with Pi Wallet
+                Sign in to view your profile
               </h2>
               <p className="text-sm mb-6" style={{ color: 'var(--color-subtext)' }}>
-                Sign in with your Pi Wallet to access your profile
+                Use your email/password account to access your profile and orders.
               </p>
               <button
-                onClick={() => void handleConnect()}
-                disabled={connecting}
-                className="px-8 py-4 rounded-2xl font-bold text-lg disabled:opacity-50"
+                onClick={() => router.push('/login')}
+                className="px-8 py-4 rounded-2xl font-bold text-lg"
                 style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
               >
-                {connecting ? 'Connecting...' : 'Connect Pi Wallet'}
+                Sign In
               </button>
-              {error && (
-                <p className="mt-3 text-sm" style={{ color: 'var(--color-error)' }}>
-                  {error}
-                </p>
-              )}
             </div>
           )}
         </ErrorBoundary>

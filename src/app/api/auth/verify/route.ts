@@ -107,6 +107,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       .eq('pi_uid', piUser.uid)
       .maybeSingle()
 
+    const typedExistingUser = existingUser as ExistingUser | null
     const isNewUser = !existingUser
 
     // 4. Upsert the verified user into the `users` table using the service
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     // Include avatar_url only if it exists in the schema (fallback for PGRST204)
-    if (typedExistingUser && 'avatar_url' in typedExistingUser) {
+    if (typedExistingUser && 'avatar_url' in (typedExistingUser as Record<string, unknown>)) {
       upsertPayload.avatar_url = null;
     }
 

@@ -341,10 +341,10 @@ function MapWidget({ isAuthenticated, onLogin, onExpand, height, radius }: MapWi
             </svg>
           </div>
           <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
-            Connect Pi Wallet to view Local Sellers
+            Sign in to view Local Sellers
           </p>
           <Button size="sm" onClick={onLogin}>
-            Connect Wallet
+            Sign In
           </Button>
         </div>
       </div>

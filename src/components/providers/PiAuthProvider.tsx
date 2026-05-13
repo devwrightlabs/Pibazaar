@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
+import { supabase } from '@/lib/supabase'
 import { useStore } from '@/store/useStore'
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -28,129 +28,112 @@ export function usePiAuth() {
 export default function PiAuthProvider({ children }: { children: React.ReactNode }) {
   const { setCurrentUser } = useStore()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isPiSdkReady, setIsPiSdkReady] = useState(false)
 
-  // Initialise the Pi SDK once on mount in production mode.
-  useEffect(() => {
-    const initialisePiSdk = () => {
-      if (!(typeof window !== 'undefined' && window.Pi)) {
-        setIsPiSdkReady(false)
-        console.error('[PiAuthProvider] Pi SDK not found on window')
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
-        return
+  const clearClientAuth = useCallback(() => {
+    setCurrentUser(null)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('pibazaar-token')
+      document.cookie = 'pibazaar-token=; path=/; max-age=0; SameSite=Lax'
+    }
+  }, [setCurrentUser])
+
+  const syncSession = useCallback(async (accessToken: string) => {
+    const res = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(data.error ?? 'Failed to sync session')
+    }
+
+    const data = (await res.json()) as {
+      token: string
+      user: {
+        pi_uid: string
+        username: string | null
+        avatar_url: string | null
       }
+    }
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pibazaar-token', data.token)
+      document.cookie = `pibazaar-token=${data.token}; path=/; max-age=3600; SameSite=Lax`
+    }
+
+    setCurrentUser({
+      id: data.user.pi_uid,
+      pi_uid: data.user.pi_uid,
+      username: data.user.username ?? 'Pioneer',
+      avatar_url: data.user.avatar_url,
+      bio: null,
+      created_at: new Date().toISOString(),
+    })
+  }, [setCurrentUser])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const bootstrap = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const initialised = initPiSdk()
-        setIsPiSdkReady(initialised)
-        if (!initialised) {
-          setError('Pi SDK failed to initialize. Please refresh and try again.')
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) {
+          await syncSession(session.access_token)
+        } else {
+          clearClientAuth()
         }
       } catch (err) {
-        console.error('[PiAuthProvider] Pi SDK init failed', err)
-        setIsPiSdkReady(false)
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
+        console.error('[PiAuthProvider] Session bootstrap failed:', err)
+        clearClientAuth()
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
-    initialisePiSdk()
-  }, [])
+    void bootstrap()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      void (async () => {
+        setLoading(true)
+        setError(null)
+        try {
+          if (session?.access_token) {
+            await syncSession(session.access_token)
+          } else {
+            clearClientAuth()
+          }
+        } catch (err) {
+          console.error('[PiAuthProvider] Auth state sync failed:', err)
+          clearClientAuth()
+          if (isMounted) {
+            setError('Authentication sync failed. Please sign in again.')
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false)
+          }
+        }
+      })
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [clearClientAuth, syncSession])
 
   const handleLogin = useCallback(async () => {
-    setLoading(true)
     setError(null)
-
-    try {
-      if (!(typeof window !== 'undefined' && window.Pi)) {
-        setError('Pi Browser is required to log in.')
-        return
-      }
-
-      if (!isPiSdkReady) {
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
-        return
-      }
-
-      // 1. Authenticate with the Pi SDK with a 10-second timeout.
-      // This prevents infinite loading if the Pi SDK hangs or fails silently.
-      const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('Authentication timed out after 10 seconds')), 10000)
-      })
-
-      const piAuth = await Promise.race([
-        authenticateWithPi(),
-        timeoutPromise,
-      ])
-
-      if (!piAuth) {
-        console.warn('Authentication returned null. Handshake failed.')
-        setError('Pi authentication failed. Please try again.')
-        return
-      }
-
-      // 2. POST the accessToken (and user object, including wallet_address) to the
-      //    backend for server-side verification and JWT minting.
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessToken: piAuth.accessToken,
-          user: piAuth.user,
-        }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { error?: string }
-        const errorMessage = data.error ?? 'Verification failed. Please try again.'
-        setError(errorMessage)
-
-        // Log internal server errors during verification for debugging
-        if (res.status === 500) {
-          console.error('[PiAuthProvider] Server error during verification:', errorMessage)
-        }
-        return
-      }
-
-      const data = (await res.json()) as {
-        token: string
-        isNewUser: boolean
-        user: {
-          pi_uid: string
-          username: string | null
-          avatar_url: string | null
-          wallet_address: string | null
-        }
-      }
-
-      // 3. Save the JWT to localStorage.
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pibazaar-token', data.token)
-        // Set cookie for middleware access if needed
-        document.cookie = `pibazaar-token=${data.token}; path=/; max-age=3600; SameSite=Lax`;
-      }
-
-      // 4. Update the Zustand store.
-      setCurrentUser({
-        id: data.user.pi_uid,
-        pi_uid: data.user.pi_uid,
-        username: data.user.username ?? 'Pioneer',
-        avatar_url: data.user.avatar_url ?? null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
-
-      // 5. Route to the profile dashboard after successful login or sign-up.
-      router.push('/profile')
-    } catch (err) {
-      console.error('[PiAuthProvider] Login failed:', err)
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
-    } finally {
-      // CRITICAL: Always reset loading state, even if the SDK hangs or times out.
-      setLoading(false)
-    }
-  }, [isPiSdkReady, setCurrentUser, router])
+    router.push('/login')
+  }, [router])
 
   return (
     <PiAuthContext.Provider value={{ handleLogin, loading, error }}>

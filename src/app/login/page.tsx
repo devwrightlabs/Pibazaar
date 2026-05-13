@@ -2,58 +2,118 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
+import { supabase } from '@/lib/supabase'
+
+type AuthMode = 'login' | 'signup'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [mode, setMode] = useState<AuthMode>('login')
+  const [identifier, setIdentifier] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleLoginWithPi = async () => {
+  const normalizeIdentifierToEmail = (value: string) => {
+    const clean = value.trim().toLowerCase()
+    if (clean.includes('@')) return clean
+    const safe = clean.replace(/[^a-z0-9._-]/g, '')
+    return `${safe}@users.pibazaar.local`
+  }
+
+  const displayNameFromIdentifier = (value: string) => {
+    const clean = value.trim()
+    if (!clean) return 'Pioneer'
+    if (clean.includes('@')) return clean.split('@')[0]
+    return clean
+  }
+
+  const syncSession = async (accessToken: string, preferredUsername: string) => {
+    const response = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessToken,
+        username: preferredUsername,
+      }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      throw new Error(payload.error ?? 'Failed to initialize user session.')
+    }
+
+    const payload = await response.json() as { token: string }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pibazaar-token', payload.token)
+      document.cookie = `pibazaar-token=${payload.token}; path=/; max-age=3600; SameSite=Lax`
+    }
+  }
+
+  const handleSubmit = async () => {
+    const normalizedEmail = normalizeIdentifierToEmail(identifier)
+    const preferredUsername = username.trim() || displayNameFromIdentifier(identifier)
+    if (!normalizedEmail || !password.trim()) {
+      setError('Please enter an email or username and password.')
+      return
+    }
+
     setLoading(true)
+    setMessage(null)
     setError(null)
 
     try {
-      // Initialize Pi SDK
-      initPiSdk()
+      if (mode === 'signup') {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: {
+              username: preferredUsername,
+            },
+          },
+        })
 
-      // Authenticate with Pi
-      const auth = await authenticateWithPi()
+        if (signUpError) {
+          setError(signUpError.message)
+          return
+        }
 
-      if (!auth || !auth.accessToken) {
-        console.warn('Authentication returned null. Handshake failed.')
-        setError('Pi authentication failed. Please try again.')
+        if (!data.session?.access_token) {
+          setMessage('Account created. Please verify your email, then sign in.')
+          setMode('login')
+          return
+        }
+
+        await syncSession(data.session.access_token, preferredUsername)
+        router.push('/')
+        router.refresh()
         return
       }
 
-      // Send to backend for verification
-      const response = await fetch('/api/auth/pi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: auth.accessToken }),
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
       })
 
-      if (!response.ok) {
-        setError('Authentication failed. Please try again.')
+      if (signInError) {
+        setError(signInError.message)
         return
       }
 
-      const data = await response.json()
-
-      // Store session and force a full app reload so authenticated UI state
-      // can be re-hydrated from persisted auth data instead of preserving
-      // stale in-memory client state across a SPA navigation.
-      if (typeof window !== 'undefined' && data.token) {
-        localStorage.setItem('pibazaar-token', data.token)
-        window.location.assign('/')
+      if (!data.session?.access_token) {
+        setError('Login did not return a valid session.')
         return
       }
 
-      // Fallback redirect
+      await syncSession(data.session.access_token, preferredUsername)
       router.push('/')
+      router.refresh()
     } catch (err) {
       console.error('Login error:', err)
-      setError('Login failed. Please try again.')
+      setError(err instanceof Error ? err.message : 'Authentication failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -61,40 +121,119 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--color-background)' }}>
-      <div className="w-full max-w-md space-y-8 text-center">
+      <div className="w-full max-w-md space-y-6 rounded-2xl p-5 sm:p-6" style={{ backgroundColor: 'var(--color-card-bg)', border: '1px solid var(--color-border)' }}>
         <div>
-          <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--color-text)', fontFamily: 'Sora, sans-serif' }}>
-            Welcome to <span style={{ color: 'var(--color-gold)' }}>Pi Bazaar</span>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: 'var(--color-text)', fontFamily: 'Sora, sans-serif' }}>
+            {mode === 'login' ? 'Sign in to' : 'Create your'} <span style={{ color: 'var(--color-gold)' }}>Pi Bazaar</span> account
           </h1>
-          <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
-            The decentralized marketplace for the Pi Network
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--color-subtext)' }}>
+            Use email/password for account access. Connect your Pi Wallet only when paying at checkout.
           </p>
         </div>
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-2 rounded-xl p-1" style={{ backgroundColor: 'var(--color-control-bg)' }}>
           <button
-            onClick={() => void handleLoginWithPi()}
+            onClick={() => setMode('login')}
+            className="py-2.5 rounded-lg text-sm font-semibold"
+            style={{
+              backgroundColor: mode === 'login' ? 'var(--color-gold)' : 'transparent',
+              color: mode === 'login' ? '#000' : 'var(--color-text)',
+            }}
+          >
+            Login
+          </button>
+          <button
+            onClick={() => setMode('signup')}
+            className="py-2.5 rounded-lg text-sm font-semibold"
+            style={{
+              backgroundColor: mode === 'signup' ? 'var(--color-gold)' : 'transparent',
+              color: mode === 'signup' ? '#000' : 'var(--color-text)',
+            }}
+          >
+            Sign Up
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+            Email or Username
+            <input
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
+              placeholder="you@example.com or yourname"
+              className="mt-1 w-full rounded-xl px-3 py-3 text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--color-control-bg)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+              }}
+            />
+          </label>
+
+          {mode === 'signup' && (
+            <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+              Display Username (optional)
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Your public name"
+                className="mt-1 w-full rounded-xl px-3 py-3 text-sm outline-none"
+                style={{
+                  backgroundColor: 'var(--color-control-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                }}
+              />
+            </label>
+          )}
+
+          <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter password"
+              className="mt-1 w-full rounded-xl px-3 py-3 text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--color-control-bg)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+              }}
+            />
+          </label>
+
+          <button
+            onClick={() => void handleSubmit()}
             disabled={loading}
-            className="w-full py-4 px-6 rounded-xl font-semibold text-base transition-opacity"
+            className="w-full py-3.5 px-4 rounded-xl font-semibold text-base transition-opacity"
             style={{
               backgroundColor: 'var(--color-gold)',
               color: '#000',
-              opacity: loading ? 0.6 : 1,
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? 'Connecting...' : 'Login with Pi Wallet'}
+            {loading ? 'Please wait…' : mode === 'login' ? 'Login' : 'Create Account'}
           </button>
-
-          {error && (
-            <div className="p-4 rounded-xl" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #EF4444' }}>
-              <p className="text-sm" style={{ color: '#EF4444' }}>{error}</p>
-            </div>
-          )}
         </div>
 
-        <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-          By logging in, you agree to our Terms of Service and Privacy Policy
-        </p>
+        {message && (
+          <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22C55E' }}>
+            <p className="text-sm" style={{ color: '#22C55E' }}>{message}</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #EF4444' }}>
+            <p className="text-sm" style={{ color: '#EF4444' }}>{error}</p>
+          </div>
+        )}
+
+        <div className="text-xs text-center" style={{ color: 'var(--color-subtext)' }}>
+          <button onClick={() => router.push('/')} className="underline underline-offset-2">
+            Back to marketplace
+          </button>
+        </div>
       </div>
     </main>
   )

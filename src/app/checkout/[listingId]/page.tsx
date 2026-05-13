@@ -10,6 +10,7 @@ import PaymentBreakdown from '@/components/PaymentBreakdown'
 import ShippingAddressForm from '@/components/ShippingAddressForm'
 import ShippingSelector from '@/components/ShippingSelector'
 import PiPayButton from '@/components/PiPayButton'
+import ConnectPiWalletToPay from '@/components/checkout/ConnectPiWalletToPay'
 import { useStore } from '@/store/useStore'
 
 interface CheckoutContentProps {
@@ -28,6 +29,7 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
   const [paymentId, setPaymentId] = useState<string | null>(null)
   const [escrowId, setEscrowId] = useState<string | null>(null)
   const [creatingEscrow, setCreatingEscrow] = useState(false)
+  const [piWalletConnected, setPiWalletConnected] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -224,7 +226,12 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
 
         {/* Pay button */}
         {currentUser ? (
-          escrowId ? (
+          !piWalletConnected ? (
+            <ConnectPiWalletToPay
+              onConnected={() => setPiWalletConnected(true)}
+              disabled={!canInitiatePayment || creatingEscrow}
+            />
+          ) : escrowId ? (
             <PiPayButton
               amount={listing.price_in_pi}
               memo={`PiBazaar: ${listing.title}`}
@@ -263,9 +270,15 @@ function CheckoutContent({ listingId }: CheckoutContentProps) {
         ) : (
           <div className="rounded-xl p-4 text-center" style={{ backgroundColor: 'var(--color-card-bg)' }}>
             <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
-              Please sign in with your Pi account to continue.
+              Please sign in to continue to checkout.
             </p>
           </div>
+        )}
+
+        {currentUser && !piWalletConnected && (
+          <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }}>
+            Connect your Pi Wallet to continue with payment.
+          </p>
         )}
 
         {isPhysical && !selectedAddress && (
