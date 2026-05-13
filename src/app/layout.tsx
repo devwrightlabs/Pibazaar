@@ -7,7 +7,6 @@ import Navbar from '@/components/Navbar'
 import RootErrorBoundary from '@/components/RootErrorBoundary'
 import StoreHydration from '@/components/providers/StoreHydration'
 import ThemeProvider from '@/components/providers/ThemeProvider'
-import PiAuthProvider from '@/components/providers/PiAuthProvider'
 
 export const metadata: Metadata = {
   title: 'PiBazaar',
@@ -28,14 +27,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-background pb-20">
         <StoreHydration />
         <ThemeProvider>
-          <PiAuthProvider>
-            <Navbar />
-            <RootErrorBoundary>
-              {children}
-            </RootErrorBoundary>
-            <GlobalModal />
-            <BottomNav />
-          </PiAuthProvider>
+          <Navbar />
+          <RootErrorBoundary>
+            {children}
+          </RootErrorBoundary>
+          <GlobalModal />
+          <BottomNav />
         </ThemeProvider>
       </body>
     </html>

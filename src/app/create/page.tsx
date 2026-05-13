@@ -17,6 +17,7 @@ import URLImportForm from '@/components/URLImportForm'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import ShippingSelector from '@/components/ShippingSelector'
+import ConnectPiWallet from '@/components/auth/ConnectPiWallet'
 
 const INITIAL_FORM: CreateListingForm = {
   title: '',
@@ -74,6 +75,7 @@ export default function CreateListingPage() {
   const [form, setForm] = useState<CreateListingForm>(INITIAL_FORM)
   const [publishing, setPublishing] = useState(false)
   const [previewCollapsed, setPreviewCollapsed] = useState(false)
+  const [piWalletConnected, setPiWalletConnected] = useState(false)
 
   const update = useCallback(<K extends keyof CreateListingForm>(key: K, value: CreateListingForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -106,7 +108,16 @@ export default function CreateListingPage() {
     if (!currentUser) {
       openModal({
         title: 'Not logged in',
-        message: 'Please connect your Pi Wallet before publishing a listing.',
+        message: 'Please log in before publishing a listing.',
+        variant: 'alert',
+      })
+      return
+    }
+
+    if (!piWalletConnected) {
+      openModal({
+        title: 'Pi wallet required',
+        message: 'Connect your Pi Wallet before publishing a listing.',
         variant: 'alert',
       })
       return
@@ -185,7 +196,8 @@ export default function CreateListingPage() {
     form.description.trim().length > 0 &&
     form.images.length > 0 &&
     form.fast_seller_agreed &&
-    !publishing
+    !publishing &&
+    piWalletConnected
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -232,6 +244,12 @@ export default function CreateListingPage() {
           <div className="lg:grid lg:grid-cols-2 lg:gap-8">
             {/* Left — Form */}
             <div className="space-y-5">
+              <ConnectPiWallet
+                title="Connect Pi Wallet to List"
+                description="Wallet connection is deferred until you publish listings."
+                onStatusChange={setPiWalletConnected}
+              />
+
               {activeTab === 'url' ? (
                 <URLImportForm onImported={handleURLImport} />
               ) : (

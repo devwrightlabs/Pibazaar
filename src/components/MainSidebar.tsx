@@ -5,8 +5,6 @@ import Link from 'next/link'
 import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { authenticateWithPi } from '@/lib/pi-sdk'
 import { supabase } from '@/lib/supabase'
 
 /* ─── Props ────────────────────────────────────────────────────────────── */
@@ -75,14 +73,12 @@ const SETTINGS_LINKS: SidebarLink[] = [
 /* ─── Component ────────────────────────────────────────────────────────── */
 
 export default function MainSidebar({ open, onClose }: MainSidebarProps) {
-  const { currentUser, isAuthenticated, setCurrentUser } = useStore()
+  const { currentUser, isAuthenticated } = useStore()
   const themeMode = useUIStore((s) => s.themeMode)
   const setThemeMode = useUIStore((s) => s.setThemeMode)
   const piPriceUsd = useStore((s) => s.piPriceUsd)
 
   const [profileLoading, setProfileLoading] = useState(true)
-  const [connecting, setConnecting] = useState(false)
-  const [connectError, setConnectError] = useState<string | null>(null)
   const [filterText, setFilterText] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -134,55 +130,6 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
       })()
     }
   }, [themeMode, setThemeMode, currentUser])
-
-  /* ── Pi Wallet connect ─────────────────────────────────────────────── */
-  const handleConnect = async () => {
-    setConnecting(true)
-    setConnectError(null)
-    try {
-      const piAuth = await authenticateWithPi()
-      if (!piAuth) {
-        setConnectError('Pi Browser is required to connect.')
-        setConnecting(false)
-        return
-      }
-
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: piAuth.accessToken }),
-      })
-
-      if (!res.ok) {
-        setConnectError('Verification failed. Please try again.')
-        setConnecting(false)
-        return
-      }
-
-      const data = (await res.json()) as {
-        token: string
-        user: { pi_uid: string; username: string | null; avatar_url: string | null }
-      }
-
-      setCurrentUser({
-        id: data.user.pi_uid,
-        pi_uid: data.user.pi_uid,
-        username: data.user.username ?? 'Pioneer',
-        avatar_url: data.user.avatar_url ?? null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pibazaar-token', data.token)
-      }
-      setConnecting(false)
-    } catch (err) {
-      console.error('Wallet connection failed:', err)
-      setConnectError('Connection failed. Please try again.')
-      setConnecting(false)
-    }
-  }
 
   /* ── Touch handlers for swipe-to-close (swipe left closes) ─────────── */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -290,22 +237,27 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
                 </svg>
               </div>
               <p className="text-base font-bold" style={{ color: 'var(--color-text)' }}>
-                Connect Pi Wallet to unlock Dashboard
+                Login to unlock Dashboard
               </p>
               <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
                 Access orders, messages, reviews, and the full seller map.
               </p>
-              <Button
-                size="lg"
-                onClick={handleConnect}
-                disabled={connecting}
-                className="w-full"
-              >
-                {connecting ? 'Connecting…' : 'Connect Pi Wallet'}
-              </Button>
-              {connectError && (
-                <p className="text-xs" style={{ color: 'var(--color-error)' }}>{connectError}</p>
-              )}
+              <div className="w-full space-y-2">
+                <Link
+                  href="/login"
+                  className="block w-full rounded-xl px-4 py-3 text-center text-sm font-semibold"
+                  style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="block w-full rounded-xl border px-4 py-3 text-center text-sm font-semibold"
+                  style={{ borderColor: 'rgba(240,192,64,0.35)', color: 'var(--color-gold)' }}
+                >
+                  Sign Up
+                </Link>
+              </div>
             </div>
           )}
 

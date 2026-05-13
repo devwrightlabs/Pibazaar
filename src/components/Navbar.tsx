@@ -1,18 +1,17 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { usePiAuth } from '@/components/providers/PiAuthProvider'
 import NotificationBell from '@/components/NotificationBell'
 
 export default function Navbar() {
+  const router = useRouter()
   const { currentUser, isAuthenticated } = useStore()
   const jurisdictionMode = useUIStore((s) => s.jurisdictionMode)
   const setJurisdictionMode = useUIStore((s) => s.setJurisdictionMode)
-  const { handleLogin, loading, error } = usePiAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-secondary-bg/60 backdrop-blur-lg">
@@ -49,9 +48,7 @@ export default function Navbar() {
         {/* Auth area */}
         <div className="flex items-center gap-3">
           <NotificationBell />
-          {loading ? (
-            <Skeleton shape="line" className="h-9 w-28 rounded-xl" />
-          ) : isAuthenticated && currentUser ? (
+          {isAuthenticated && currentUser ? (
             <Link href="/profile" className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center">
                 <span className="font-bold text-black text-xs">
@@ -63,18 +60,9 @@ export default function Navbar() {
               </span>
             </Link>
           ) : (
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                size="sm"
-                onClick={() => void handleLogin()}
-                aria-label="Connect wallet"
-              >
-                Connect Wallet
-              </Button>
-              {error && (
-                <span className="text-[10px] text-error">{error}</span>
-              )}
-            </div>
+            <Button size="sm" onClick={() => router.push('/login')} aria-label="Open login">
+              Login
+            </Button>
           )}
         </div>
       </div>

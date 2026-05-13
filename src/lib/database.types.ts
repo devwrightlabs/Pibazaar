@@ -7,6 +7,8 @@ export type UserRow = {
   email: string | null
   avatar_url: string | null
   bio: string | null
+  pi_username: string | null
+  pi_wallet_address: string | null
   wallet_address: string | null
   is_verified: boolean
   role: 'user' | 'admin'
@@ -19,11 +21,13 @@ export type UserRow = {
 
 export type UserInsert = Omit<
   UserRow,
-  'id' | 'created_at' | 'updated_at' | 'email' | 'avatar_url' | 'bio' | 'wallet_address' | 'role' | 'is_suspended' | 'theme_preference' | 'jurisdiction_mode'
+  'id' | 'created_at' | 'updated_at' | 'email' | 'avatar_url' | 'bio' | 'pi_username' | 'pi_wallet_address' | 'wallet_address' | 'role' | 'is_suspended' | 'theme_preference' | 'jurisdiction_mode'
 > & {
   email?: string | null
   avatar_url?: string | null
   bio?: string | null
+  pi_username?: string | null
+  pi_wallet_address?: string | null
   wallet_address?: string | null
   role?: 'user' | 'admin'
   is_suspended?: boolean

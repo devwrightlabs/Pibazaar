@@ -35,7 +35,7 @@ function AuthToast({ message }: { message: string }) {
   )
 }
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter()
   const { setCurrentUser } = useStore()
 
@@ -50,7 +50,7 @@ export default function LoginPage() {
     setErrorToast(null)
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -59,7 +59,7 @@ export default function LoginPage() {
       const data = (await response.json().catch(() => ({}))) as AuthApiResponse
 
       if (!response.ok || !data.session || !data.user) {
-        setErrorToast(data.error ?? 'Login failed. Please try again.')
+        setErrorToast(data.error ?? 'Sign up failed. Please try again.')
         setLoading(false)
         return
       }
@@ -70,7 +70,7 @@ export default function LoginPage() {
       })
 
       if (sessionError) {
-        setErrorToast('Authenticated, but session setup failed. Please retry.')
+        setErrorToast('Account created, but session setup failed. Please retry.')
         setLoading(false)
         return
       }
@@ -114,10 +114,10 @@ export default function LoginPage() {
         }}
       >
         <h1 className="text-3xl font-bold" style={{ color: '#F8F8F8' }}>
-          Login
+          Create account
         </h1>
         <p className="mt-2 text-sm" style={{ color: '#C8C8C8' }}>
-          Access your P2P Bazaar account.
+          Sign up with a username and password only.
         </p>
 
         <form className="mt-7 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
@@ -146,7 +146,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
+              autoComplete="new-password"
               required
               minLength={8}
               maxLength={128}
@@ -168,18 +168,18 @@ export default function LoginPage() {
             {loading ? (
               <span className="inline-flex items-center gap-2">
                 <span className="inline-block h-4 w-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-                Signing in...
+                Creating account...
               </span>
             ) : (
-              'Login'
+              'Sign up'
             )}
           </button>
         </form>
 
         <p className="mt-5 text-sm" style={{ color: '#C8C8C8' }}>
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="font-semibold" style={{ color: '#F0C040' }}>
-            Sign up
+          Already have an account?{' '}
+          <Link href="/login" className="font-semibold" style={{ color: '#F0C040' }}>
+            Login
           </Link>
         </p>
       </section>
