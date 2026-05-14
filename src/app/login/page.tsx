@@ -123,7 +123,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="your_username"
-                autoComplete={tab === 'login' ? 'username' : 'username'}
+                autoComplete="username"
                 required
                 minLength={3}
                 maxLength={30}

@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     if (insertError) {
       // Roll back the auth user so we don't leave orphaned records
       await admin.auth.admin.deleteUser(authUserId).catch((e: unknown) => {
-        console.error('[auth/signup] Failed to rollback auth user after insert failure:', e)
+        console.error('[auth/signup] Failed to rollback auth user after insert failure. Auth user ID may be orphaned. Insert error was:', insertError?.message, 'Rollback error:', e)
       })
       console.error('[auth/signup] users insert error:', insertError)
       return NextResponse.json({ error: 'Could not save user profile. Please try again.' }, { status: 500 })

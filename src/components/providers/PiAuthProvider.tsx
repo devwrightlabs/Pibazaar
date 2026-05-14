@@ -31,7 +31,14 @@ const AuthContext = createContext<AuthContextValue>({
 /** @deprecated Use useAuth() */
 export function usePiAuth(): AuthContextValue & { handleLogin: () => void; loading: boolean; error: null } {
   const ctx = useContext(AuthContext)
-  return { ...ctx, handleLogin: () => {}, loading: ctx.isLoading, error: null }
+  return {
+    ...ctx,
+    handleLogin: () => {
+      console.warn('[PiBazaar] usePiAuth().handleLogin() is deprecated and no longer performs Pi authentication. Use the /login page for user sign-in.')
+    },
+    loading: ctx.isLoading,
+    error: null,
+  }
 }
 
 export function useAuth() {

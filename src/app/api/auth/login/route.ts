@@ -89,7 +89,8 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (fetchError || !userRow) {
-      console.error('[auth/login] User row not found for auth ID:', authUser.id, fetchError)
+      // Avoid logging the raw auth ID in production to limit internal state exposure
+      console.error('[auth/login] User row not found for authenticated user. DB error:', fetchError?.message)
       return NextResponse.json({ error: 'User profile not found. Please contact support.' }, { status: 404 })
     }
 
