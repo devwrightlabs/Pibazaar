@@ -2,98 +2,194 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
+import { useStore } from '@/store/useStore'
+
+type Tab = 'login' | 'signup'
+
+interface AuthResponse {
+  token?: string
+  user?: {
+    id: string
+    pi_uid: string
+    username: string
+    avatar_url: string | null
+  }
+  error?: string
+}
 
 export default function LoginPage() {
   const router = useRouter()
+  const { setCurrentUser } = useStore()
+  const [tab, setTab] = useState<Tab>('login')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleLoginWithPi = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      // Initialize Pi SDK
-      initPiSdk()
-
-      // Authenticate with Pi
-      const auth = await authenticateWithPi()
-
-      if (!auth || !auth.accessToken) {
-        console.warn('Authentication returned null. Handshake failed.')
-        setError('Pi authentication failed. Please try again.')
-        return
-      }
-
-      // Send to backend for verification
-      const response = await fetch('/api/auth/pi', {
+      const endpoint = tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: auth.accessToken }),
+        body: JSON.stringify({ username: username.trim(), password }),
       })
 
-      if (!response.ok) {
-        setError('Authentication failed. Please try again.')
+      const data = await res.json() as AuthResponse
+
+      if (!res.ok || !data.token || !data.user) {
+        setError(data.error ?? 'Something went wrong. Please try again.')
         return
       }
 
-      const data = await response.json()
-
-      // Store session and force a full app reload so authenticated UI state
-      // can be re-hydrated from persisted auth data instead of preserving
-      // stale in-memory client state across a SPA navigation.
-      if (typeof window !== 'undefined' && data.token) {
+      // Persist token and update Zustand store
+      if (typeof window !== 'undefined') {
         localStorage.setItem('pibazaar-token', data.token)
-        window.location.assign('/')
-        return
+        document.cookie = `pibazaar-token=${data.token}; path=/; max-age=3600; SameSite=Lax`
       }
 
-      // Fallback redirect
-      router.push('/')
+      setCurrentUser({
+        id: data.user.pi_uid,
+        pi_uid: data.user.pi_uid,
+        username: data.user.username,
+        avatar_url: data.user.avatar_url ?? null,
+        bio: null,
+        created_at: new Date().toISOString(),
+      })
+
+      router.push('/profile')
     } catch (err) {
-      console.error('Login error:', err)
-      setError('Login failed. Please try again.')
+      console.error('[LoginPage] Auth error:', err)
+      setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--color-background)' }}>
-      <div className="w-full max-w-md space-y-8 text-center">
-        <div>
-          <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--color-text)', fontFamily: 'Sora, sans-serif' }}>
-            Welcome to <span style={{ color: 'var(--color-gold)' }}>Pi Bazaar</span>
+    <main
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: 'linear-gradient(135deg, #12121c 0%, #1a1a2e 100%)' }}
+    >
+      <div className="w-full max-w-md space-y-8">
+        {/* Header */}
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4" style={{ backgroundColor: '#F0C040' }}>
+            <span className="font-bold text-black text-2xl">π</span>
+          </div>
+          <h1 className="text-3xl font-bold mb-1" style={{ color: '#F5F5F5', fontFamily: 'Sora, sans-serif' }}>
+            Pi Bazaar
           </h1>
-          <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
+          <p className="text-sm" style={{ color: '#9CA3AF' }}>
             The decentralized marketplace for the Pi Network
           </p>
         </div>
 
-        <div className="space-y-4">
-          <button
-            onClick={() => void handleLoginWithPi()}
-            disabled={loading}
-            className="w-full py-4 px-6 rounded-xl font-semibold text-base transition-opacity"
-            style={{
-              backgroundColor: 'var(--color-gold)',
-              color: '#000',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? 'Connecting...' : 'Login with Pi Wallet'}
-          </button>
+        {/* Card */}
+        <div
+          className="rounded-2xl p-6 space-y-6"
+          style={{ backgroundColor: '#12121c', border: '1px solid rgba(240,192,64,0.15)' }}
+        >
+          {/* Tab switcher */}
+          <div className="flex rounded-xl overflow-hidden" style={{ backgroundColor: '#0A0A0F' }}>
+            {(['login', 'signup'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => { setTab(t); setError(null) }}
+                className="flex-1 py-2.5 text-sm font-semibold capitalize transition-colors"
+                style={{
+                  backgroundColor: tab === t ? '#F0C040' : 'transparent',
+                  color: tab === t ? '#000' : '#9CA3AF',
+                }}
+              >
+                {t === 'login' ? 'Sign In' : 'Create Account'}
+              </button>
+            ))}
+          </div>
 
-          {error && (
-            <div className="p-4 rounded-xl" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #EF4444' }}>
-              <p className="text-sm" style={{ color: '#EF4444' }}>{error}</p>
+          {/* Form */}
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium" style={{ color: '#D1D5DB' }}>
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your_username"
+                autoComplete="username"
+                required
+                minLength={3}
+                maxLength={30}
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-colors"
+                style={{
+                  backgroundColor: '#0A0A0F',
+                  color: '#F5F5F5',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
             </div>
-          )}
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium" style={{ color: '#D1D5DB' }}>
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                required
+                minLength={6}
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-colors"
+                style={{
+                  backgroundColor: '#0A0A0F',
+                  color: '#F5F5F5',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              />
+            </div>
+
+            {error && (
+              <div
+                className="p-3 rounded-xl text-sm"
+                style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#FCA5A5' }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl font-bold text-base transition-opacity"
+              style={{
+                backgroundColor: '#F0C040',
+                color: '#000',
+                fontFamily: 'Sora, sans-serif',
+                opacity: loading ? 0.65 : 1,
+              }}
+            >
+              {loading
+                ? (tab === 'login' ? 'Signing in…' : 'Creating account…')
+                : (tab === 'login' ? 'Sign In' : 'Create Account')}
+            </button>
+          </form>
         </div>
 
-        <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-          By logging in, you agree to our Terms of Service and Privacy Policy
+        <p className="text-xs text-center" style={{ color: '#6B7280' }}>
+          By continuing, you agree to our Terms of Service and Privacy Policy
         </p>
       </div>
     </main>

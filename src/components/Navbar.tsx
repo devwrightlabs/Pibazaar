@@ -3,16 +3,15 @@
 import Link from 'next/link'
 import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { usePiAuth } from '@/components/providers/PiAuthProvider'
+import { useAuth } from '@/components/providers/PiAuthProvider'
 import NotificationBell from '@/components/NotificationBell'
 
 export default function Navbar() {
   const { currentUser, isAuthenticated } = useStore()
   const jurisdictionMode = useUIStore((s) => s.jurisdictionMode)
   const setJurisdictionMode = useUIStore((s) => s.setJurisdictionMode)
-  const { handleLogin, loading, error } = usePiAuth()
+  const { isLoading } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-secondary-bg/60 backdrop-blur-lg">
@@ -49,7 +48,7 @@ export default function Navbar() {
         {/* Auth area */}
         <div className="flex items-center gap-3">
           <NotificationBell />
-          {loading ? (
+          {isLoading ? (
             <Skeleton shape="line" className="h-9 w-28 rounded-xl" />
           ) : isAuthenticated && currentUser ? (
             <Link href="/profile" className="flex items-center gap-2">
@@ -63,21 +62,18 @@ export default function Navbar() {
               </span>
             </Link>
           ) : (
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                size="sm"
-                onClick={() => void handleLogin()}
-                aria-label="Connect wallet"
-              >
-                Connect Wallet
-              </Button>
-              {error && (
-                <span className="text-[10px] text-error">{error}</span>
-              )}
-            </div>
+            <Link
+              href="/login"
+              aria-label="Sign in"
+              className="inline-flex items-center justify-center font-semibold transition-all duration-150 active:scale-95 bg-gold text-black hover:opacity-90 px-3 py-1.5 text-sm rounded-lg"
+              style={{ minHeight: '44px' }}
+            >
+              Sign In
+            </Link>
           )}
         </div>
       </div>
     </header>
   )
 }
+

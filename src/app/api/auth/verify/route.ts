@@ -121,11 +121,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       username: piUser.username ?? 'Pioneer',
       wallet_address: walletAddress ?? null,
       updated_at: new Date().toISOString(),
-      is_verified: typedExistingUser?.is_verified ?? false,
+      is_verified: existingUser?.is_verified ?? false,
     }
 
     // Include avatar_url only if it exists in the schema (fallback for PGRST204)
-    if (typedExistingUser && 'avatar_url' in typedExistingUser) {
+    if (existingUser && 'avatar_url' in existingUser) {
       upsertPayload.avatar_url = null;
     }
 
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       user: {
         pi_uid: dbUser.pi_uid,
         username: dbUser.username ?? null,
-        avatar_url: dbUser.avatar_url ?? null,
+        avatar_url: (dbUser as { avatar_url?: string | null }).avatar_url ?? null,
         wallet_address: (dbUser as { wallet_address?: string | null }).wallet_address ?? null,
       },
     })
