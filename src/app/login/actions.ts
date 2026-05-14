@@ -1,6 +1,7 @@
 'use server'
 
 import jwt from 'jsonwebtoken'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const DUMMY_DOMAIN = 'p2pbazaar.local'
@@ -50,8 +51,9 @@ export async function signupWithUsernamePassword(input: {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   const jwtSecret = process.env.SUPABASE_JWT_SECRET
-  if (!jwtSecret || !supabaseUrl) {
+  if (!jwtSecret || !supabaseUrl || !supabaseAnonKey) {
     return { success: false, error: 'Server configuration error.' }
   }
 
@@ -95,27 +97,50 @@ export async function signupWithUsernamePassword(input: {
     })
   }
 
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData.session?.access_token
+  if (!accessToken) {
+    return {
+      success: false,
+      error: 'Could not establish an authenticated session for profile creation.',
+    }
+  }
+
+  const rlsClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+
   try {
-    const { error: insertError } = await supabase
+    const { error: insertError } = await rlsClient
       .from('users')
       .insert({
         id: authData.user.id,
         username,
         pi_wallet_address: null,
-      } as never)
+      })
 
     if (insertError) {
+      console.error('[auth/signup-action] users insert error:', insertError)
       return {
         success: false,
-        error: insertError.message ?? 'Could not save user profile.',
+        error: 'Could not save user profile.',
         postgresCode: insertError.code ?? undefined,
       }
     }
   } catch (error) {
     const maybeError = error as { code?: string; message?: string }
+    console.error('[auth/signup-action] users insert threw:', maybeError)
     return {
       success: false,
-      error: maybeError.message ?? 'Could not save user profile.',
+      error: 'Could not save user profile.',
       postgresCode: maybeError.code,
     }
   }

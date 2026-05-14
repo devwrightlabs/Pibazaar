@@ -71,7 +71,7 @@ export default function LoginPage() {
           token: signup.token,
           user: signup.user,
           error: signup.postgresCode
-            ? `${signup.error} (Postgres: ${signup.postgresCode})`
+            ? `Profile save failed (Postgres code: ${signup.postgresCode}).`
             : signup.error,
         }
       }
