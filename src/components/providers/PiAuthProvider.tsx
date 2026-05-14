@@ -1,26 +1,65 @@
 'use client'
 
+/**
+ * AuthProvider (formerly PiAuthProvider)
+ *
+ * Manages the Web2 username/password session lifecycle.
+ * Pi SDK authentication has been moved to the checkout-only
+ * ConnectPiWalletToPay component — it no longer runs on every page load.
+ *
+ * On mount, this provider attempts to restore an existing session from
+ * localStorage and hydrates the Zustand store. It also exposes a `logout()`
+ * helper consumed by the Navbar and profile pages.
+ */
+
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticateWithPi, initPiSdk } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
-interface PiAuthContextValue {
-  handleLogin: () => Promise<void>
-  loading: boolean
-  error: string | null
+interface AuthContextValue {
+  logout: () => void
+  isLoading: boolean
 }
 
-const PiAuthContext = createContext<PiAuthContextValue>({
-  handleLogin: async () => {},
-  loading: false,
-  error: null,
+const AuthContext = createContext<AuthContextValue>({
+  logout: () => {},
+  isLoading: true,
 })
 
-export function usePiAuth() {
-  return useContext(PiAuthContext)
+/** @deprecated Use useAuth() */
+export function usePiAuth(): AuthContextValue & { handleLogin: () => void; loading: boolean; error: null } {
+  const ctx = useContext(AuthContext)
+  return { ...ctx, handleLogin: () => {}, loading: ctx.isLoading, error: null }
+}
+
+export function useAuth() {
+  return useContext(AuthContext)
+}
+
+// ─── Token payload shape (same as authHelper.AuthPayload) ─────────────────────
+
+interface TokenPayload {
+  sub: string
+  pi_uid: string
+  username?: string
+  exp: number
+}
+
+/** Decode a JWT payload without signature verification (browser-safe). */
+function decodeJwtPayload(token: string): TokenPayload | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    // Pad base64url to standard base64
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const json = atob(padded)
+    return JSON.parse(json) as TokenPayload
+  } catch {
+    return null
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -28,133 +67,63 @@ export function usePiAuth() {
 export default function PiAuthProvider({ children }: { children: React.ReactNode }) {
   const { setCurrentUser } = useStore()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [isPiSdkReady, setIsPiSdkReady] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Initialise the Pi SDK once on mount in production mode.
+  // On mount: restore session from localStorage if token is still valid
   useEffect(() => {
-    const initialisePiSdk = () => {
-      if (!(typeof window !== 'undefined' && window.Pi)) {
-        setIsPiSdkReady(false)
-        console.error('[PiAuthProvider] Pi SDK not found on window')
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
-        return
-      }
-
-      try {
-        const initialised = initPiSdk()
-        setIsPiSdkReady(initialised)
-        if (!initialised) {
-          setError('Pi SDK failed to initialize. Please refresh and try again.')
-        }
-      } catch (err) {
-        console.error('[PiAuthProvider] Pi SDK init failed', err)
-        setIsPiSdkReady(false)
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
-      }
+    if (typeof window === 'undefined') {
+      setIsLoading(false)
+      return
     }
 
-    initialisePiSdk()
-  }, [])
+    const token = localStorage.getItem('pibazaar-token')
 
-  const handleLogin = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    if (!token) {
+      setIsLoading(false)
+      return
+    }
 
     try {
-      if (!(typeof window !== 'undefined' && window.Pi)) {
-        setError('Pi Browser is required to log in.')
+      // Decode without verifying — signature verification happens server-side.
+      // We only need the claims to hydrate the client store.
+      const decoded = decodeJwtPayload(token)
+
+      if (!decoded || !decoded.pi_uid || decoded.exp * 1000 < Date.now()) {
+        // Token missing or expired — clear it
+        localStorage.removeItem('pibazaar-token')
+        document.cookie = 'pibazaar-token=; path=/; max-age=0'
+        setIsLoading(false)
         return
       }
 
-      if (!isPiSdkReady) {
-        setError('Pi SDK failed to initialize. Please refresh and try again.')
-        return
-      }
-
-      // 1. Authenticate with the Pi SDK with a 10-second timeout.
-      // This prevents infinite loading if the Pi SDK hangs or fails silently.
-      const timeoutPromise = new Promise<null>((_, reject) => {
-        setTimeout(() => reject(new Error('Authentication timed out after 10 seconds')), 10000)
-      })
-
-      const piAuth = await Promise.race([
-        authenticateWithPi(),
-        timeoutPromise,
-      ])
-
-      if (!piAuth) {
-        console.warn('Authentication returned null. Handshake failed.')
-        setError('Pi authentication failed. Please try again.')
-        return
-      }
-
-      // 2. POST the accessToken (and user object, including wallet_address) to the
-      //    backend for server-side verification and JWT minting.
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessToken: piAuth.accessToken,
-          user: piAuth.user,
-        }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as { error?: string }
-        const errorMessage = data.error ?? 'Verification failed. Please try again.'
-        setError(errorMessage)
-
-        // Log internal server errors during verification for debugging
-        if (res.status === 500) {
-          console.error('[PiAuthProvider] Server error during verification:', errorMessage)
-        }
-        return
-      }
-
-      const data = (await res.json()) as {
-        token: string
-        isNewUser: boolean
-        user: {
-          pi_uid: string
-          username: string | null
-          avatar_url: string | null
-          wallet_address: string | null
-        }
-      }
-
-      // 3. Save the JWT to localStorage.
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pibazaar-token', data.token)
-        // Set cookie for middleware access if needed
-        document.cookie = `pibazaar-token=${data.token}; path=/; max-age=3600; SameSite=Lax`;
-      }
-
-      // 4. Update the Zustand store.
       setCurrentUser({
-        id: data.user.pi_uid,
-        pi_uid: data.user.pi_uid,
-        username: data.user.username ?? 'Pioneer',
-        avatar_url: data.user.avatar_url ?? null,
+        id: decoded.pi_uid,
+        pi_uid: decoded.pi_uid,
+        username: decoded.username ?? 'Pioneer',
+        avatar_url: null,
         bio: null,
         created_at: new Date().toISOString(),
       })
-
-      // 5. Route to the profile dashboard after successful login or sign-up.
-      router.push('/profile')
-    } catch (err) {
-      console.error('[PiAuthProvider] Login failed:', err)
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
+    } catch {
+      localStorage.removeItem('pibazaar-token')
     } finally {
-      // CRITICAL: Always reset loading state, even if the SDK hangs or times out.
-      setLoading(false)
+      setIsLoading(false)
     }
-  }, [isPiSdkReady, setCurrentUser, router])
+  }, [setCurrentUser])
+
+  const logout = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('pibazaar-token')
+      document.cookie = 'pibazaar-token=; path=/; max-age=0'
+    }
+    setCurrentUser(null)
+    router.push('/login')
+  }, [setCurrentUser, router])
 
   return (
-    <PiAuthContext.Provider value={{ handleLogin, loading, error }}>
+    <AuthContext.Provider value={{ logout, isLoading }}>
       {children}
-    </PiAuthContext.Provider>
+    </AuthContext.Provider>
   )
 }
+
