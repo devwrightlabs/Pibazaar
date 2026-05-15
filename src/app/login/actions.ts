@@ -39,7 +39,7 @@ export async function signupWithUsernamePassword(input: {
   if (username.length < 3 || username.length > 30) {
     return {
       success: false,
-      error: 'Username must be between 3 and 30 characters.',
+      error: 'Username must include at least 3 letters or numbers and be no more than 30 characters.',
     }
   }
 
