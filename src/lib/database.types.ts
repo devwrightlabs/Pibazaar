@@ -8,6 +8,7 @@ export type UserRow = {
   avatar_url: string | null
   bio: string | null
   wallet_address: string | null
+  pi_wallet_address: string | null
   is_verified: boolean
   role: 'user' | 'admin'
   is_suspended: boolean
@@ -17,14 +18,17 @@ export type UserRow = {
   updated_at: string
 }
 
-export type UserInsert = Omit<
+export type UserInsert = Partial<Omit<
   UserRow,
-  'id' | 'created_at' | 'updated_at' | 'email' | 'avatar_url' | 'bio' | 'wallet_address' | 'role' | 'is_suspended' | 'theme_preference' | 'jurisdiction_mode'
-> & {
+  'created_at' | 'updated_at'
+>> & {
+  id?: string
+  username: string
   email?: string | null
   avatar_url?: string | null
   bio?: string | null
   wallet_address?: string | null
+  pi_wallet_address?: string | null
   role?: 'user' | 'admin'
   is_suspended?: boolean
   theme_preference?: 'dark' | 'light'

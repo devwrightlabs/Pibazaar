@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/store/useStore'
+import { signupWithUsernamePassword } from './actions'
 
 type Tab = 'login' | 'signup'
 
@@ -26,22 +27,56 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const passwordChecks = {
+    minLength: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  }
+  const isSignupPasswordValid = Object.values(passwordChecks).every(Boolean)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     try {
-      const endpoint = tab === 'login' ? '/api/auth/login' : '/api/auth/signup'
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
-      })
+      let data: AuthResponse
 
-      const data = await res.json() as AuthResponse
+      if (tab === 'login') {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username.trim(), password }),
+        })
 
-      if (!res.ok || !data.token || !data.user) {
+        data = await res.json() as AuthResponse
+        if (!res.ok) {
+          setError(data.error ?? 'Something went wrong. Please try again.')
+          return
+        }
+      } else {
+        if (!isSignupPasswordValid) {
+          setError('Password must meet all security requirements.')
+          return
+        }
+
+        const signup = await signupWithUsernamePassword({
+          username: username.trim(),
+          password,
+        })
+
+        data = {
+          token: signup.token,
+          user: signup.user,
+          error: signup.postgresCode
+            ? `Profile save failed (Postgres code: ${signup.postgresCode}).`
+            : signup.error,
+        }
+      }
+
+      if (!data.token || !data.user) {
         setError(data.error ?? 'Something went wrong. Please try again.')
         return
       }
@@ -149,7 +184,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
                 required
-                minLength={6}
+                minLength={tab === 'signup' ? 8 : 6}
                 className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-colors"
                 style={{
                   backgroundColor: '#0A0A0F',
@@ -159,6 +194,34 @@ export default function LoginPage() {
                 onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)' }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
               />
+              {tab === 'signup' && (
+                <div
+                  className="rounded-xl p-3 space-y-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #12121c 0%, #1a1a2e 100%)',
+                    border: '1px solid rgba(240,192,64,0.25)',
+                  }}
+                >
+                  {[
+                    { key: 'minLength', label: 'Minimum 8 characters' },
+                    { key: 'uppercase', label: 'At least 1 uppercase letter' },
+                    { key: 'lowercase', label: 'At least 1 lowercase letter' },
+                    { key: 'number', label: 'At least 1 number' },
+                    { key: 'special', label: 'At least 1 special character' },
+                  ].map((rule) => {
+                    const ok = passwordChecks[rule.key as keyof typeof passwordChecks]
+                    return (
+                      <div key={rule.key} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full"
+                          style={{ backgroundColor: ok ? '#F0C040' : '#4B5563' }}
+                        />
+                        <span style={{ color: ok ? '#F0C040' : '#9CA3AF' }}>{rule.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {error && (
@@ -172,7 +235,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (tab === 'signup' && !isSignupPasswordValid)}
               className="w-full py-3.5 rounded-xl font-bold text-base transition-opacity"
               style={{
                 backgroundColor: '#F0C040',
