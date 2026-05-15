@@ -35,4 +35,3 @@ next-env.d.ts
 
 # local validation key — never commit this file
 Validation-key
-!validation-key.txt
