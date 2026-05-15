@@ -99,7 +99,9 @@ export default function LoginPage() {
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem('pibazaar-token', token)
-          document.cookie = `pibazaar-token=${token}; path=/; max-age=3600; SameSite=Lax`
+          const secureFlag =
+            window.location.protocol === 'https:' ? '; Secure' : ''
+          document.cookie = `pibazaar-token=${token}; path=/; max-age=3600; SameSite=Lax${secureFlag}`
         } catch (storageErr) {
           // Non-fatal: session will still work for this tab via memory.
           console.warn('[LoginPage] Token persistence failed:', storageErr)
