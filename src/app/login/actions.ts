@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-const DUMMY_DOMAIN = 'p2pbazaar.local'
+const DUMMY_DOMAIN = 'p2pbazaar.com'
 
 export interface SignupActionResult {
   success: boolean
@@ -33,13 +33,21 @@ export async function signupWithUsernamePassword(input: {
   username: string
   password: string
 }): Promise<SignupActionResult> {
-  const username = input.username.trim().toLowerCase()
+  const username = input.username.trim()
   const { password } = input
 
-  if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
+  if (username.length < 3 || username.length > 30) {
     return {
       success: false,
-      error: 'Username may only contain letters, numbers, underscores, and hyphens (3–30 characters).',
+      error: 'Username must include at least 3 letters or numbers and be no more than 30 characters.',
+    }
+  }
+
+  const safeUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (safeUsername.length < 3) {
+    return {
+      success: false,
+      error: 'Username must include at least 3 letters or numbers.',
     }
   }
 
@@ -57,11 +65,11 @@ export async function signupWithUsernamePassword(input: {
     return { success: false, error: 'Server configuration error.' }
   }
 
-  const syntheticEmail = `${username}@${DUMMY_DOMAIN}`
+  const dummyEmail = `${safeUsername}@${DUMMY_DOMAIN}`
   const supabase = await createServerSupabaseClient()
 
   const { data: authData, error: signupError } = await supabase.auth.signUp({
-    email: syntheticEmail,
+    email: dummyEmail,
     password,
   })
 
@@ -79,7 +87,7 @@ export async function signupWithUsernamePassword(input: {
     })
   } else {
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: syntheticEmail,
+      email: dummyEmail,
       password,
     })
 
