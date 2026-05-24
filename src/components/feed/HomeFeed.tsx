@@ -420,7 +420,7 @@ function FeedContent({ initialListings = [] }: HomeFeedProps) {
             className="text-center text-sm py-8"
             style={{ color: 'var(--color-subtext)' }}
           >
-            You've seen all listings in this area.
+            You&apos;ve seen all listings in this area.
           </p>
         )}
       </div>

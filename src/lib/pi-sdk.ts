@@ -73,7 +73,7 @@ function getPiSdk(): PiSDK | null {
  *
  * Call this once on app startup (e.g. in a top-level layout or provider).
  * The `sandbox` flag controls whether the SDK operates in test mode.
- * The Pi SDK script (`https://sdk.minepi.com/pi-sdk.js`) must already be
+ * The Pi SDK script (`https://app-cdn.minepi.com/version/2.0/pi.js`) must already be
  * loaded via a `<script>` tag before calling this function.
  *
  * CRITICAL: This function explicitly calls window.Pi.init() with the proper
@@ -113,8 +113,9 @@ export async function authenticateWithPi(): Promise<PiAuthResult | null> {
     const authResult = await window.Pi.authenticate(scopes, onIncompletePaymentFound)
     console.info('[pi-sdk] Wallet Connected! Welcome: ' + authResult.user.username)
     return authResult
-  } catch (error: any) {
-    console.error('[pi-sdk] Wallet Connection Failed: ' + (error.message || JSON.stringify(error)))
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : JSON.stringify(error)
+    console.error('[pi-sdk] Wallet Connection Failed: ' + message)
     return null
   }
 }

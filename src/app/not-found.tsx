@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 // Clean 404 page matching design system
 export default function NotFound() {
   return (
@@ -14,7 +16,7 @@ export default function NotFound() {
       <p className="text-lg mb-8" style={{ color: 'var(--color-subtext)' }}>
         This page doesn&apos;t exist yet.
       </p>
-      <a
+      <Link
         href="/"
         className="px-6 py-3 rounded-2xl font-semibold"
         style={{
@@ -24,7 +26,7 @@ export default function NotFound() {
         }}
       >
         Back to PiBazaar
-      </a>
+      </Link>
     </main>
   )
 }
