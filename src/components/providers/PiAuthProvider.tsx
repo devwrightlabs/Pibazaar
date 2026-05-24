@@ -82,6 +82,8 @@ interface PiAuthResultLite {
   user: { uid: string; username: string }
 }
 
+const PI_BROWSER_REQUIRED_MESSAGE = 'Please open Pi Bazaar inside the Pi Browser to sign in.'
+
 /** Decode a JWT payload without signature verification (browser-safe). */
 function decodeJwtPayload(token: string): TokenPayload | null {
   try {
@@ -227,19 +229,17 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
   )
 
   const loginWithPi = useCallback(async () => {
-    const outsideBrowserMessage = 'Please open Pi Bazaar inside the Pi Browser to sign in.'
-
     setIsLoading(true)
     setAuthError(null)
 
     try {
       if (typeof window === 'undefined') {
-        throw new Error(outsideBrowserMessage)
+        throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
       }
 
       const ready = initPiSdk()
       if (!ready || !window.Pi) {
-        throw new Error(outsideBrowserMessage)
+        throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
       }
 
       let piAuth: PiAuthResultLite
