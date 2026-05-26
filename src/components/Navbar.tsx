@@ -22,7 +22,7 @@ export default function Navbar() {
             <span className="font-bold text-black text-sm">π</span>
           </div>
           <span className="text-lg font-bold font-heading text-text-primary">
-            P2P Bazaar Marketplace
+            Pi Bazaar
           </span>
         </Link>
 
@@ -76,4 +76,3 @@ export default function Navbar() {
     </header>
   )
 }
-
