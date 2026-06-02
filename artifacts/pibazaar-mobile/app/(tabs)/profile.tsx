@@ -91,7 +91,7 @@ export default function ProfileScreen() {
           <Pressable
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              loginWithPi();
+              router.push("/login");
             }}
             style={[
               styles.signInBtn,
@@ -131,7 +131,7 @@ export default function ProfileScreen() {
           {user.username}
         </Text>
         <Text style={[styles.uid, { color: colors.mutedForeground }]}>
-          {user.uid}
+          {user.pi_uid}
         </Text>
       </View>
 

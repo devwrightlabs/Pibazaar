@@ -62,8 +62,8 @@ export default function NotificationsScreen() {
   const { user } = useAuth();
 
   const { data: notifications = [], isLoading } = useQuery({
-    queryKey: ["notifications", user?.uid],
-    queryFn: () => fetchNotifications(user?.uid ?? ""),
+    queryKey: ["notifications", user?.pi_uid],
+    queryFn: () => fetchNotifications(user?.pi_uid ?? ""),
     enabled: !!user,
   });
 

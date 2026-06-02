@@ -32,7 +32,7 @@ interface Order {
 async function fetchOrders(userId: string): Promise<Order[]> {
   if (!isSupabaseConfigured || !userId) return [];
   const { data, error } = await supabase
-    .from("orders")
+    .from("escrow")
     .select("*, listing:listings(title, images)")
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order("created_at", { ascending: false })
@@ -54,8 +54,8 @@ export default function OrdersScreen() {
   const { user } = useAuth();
 
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["orders", user?.uid],
-    queryFn: () => fetchOrders(user?.uid ?? ""),
+    queryKey: ["orders", user?.pi_uid],
+    queryFn: () => fetchOrders(user?.pi_uid ?? ""),
     enabled: !!user,
   });
 
@@ -95,6 +95,7 @@ export default function OrdersScreen() {
             }
             renderItem={({ item }) => (
               <Pressable
+                onPress={() => router.push(`/orders/${item.id}`)}
                 style={[
                   styles.card,
                   {

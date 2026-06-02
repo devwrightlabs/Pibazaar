@@ -58,7 +58,7 @@ export default function ChatRoomScreen() {
       if (!isSupabaseConfigured || !user) return;
       await supabase.from("messages").insert({
         conversation_id: id,
-        sender_id: user.uid,
+        sender_id: user.pi_uid,
         content,
         is_read: false,
       });
@@ -94,7 +94,7 @@ export default function ChatRoomScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16, gap: 8 }}
           renderItem={({ item }) => {
-            const isMe = item.sender_id === user?.uid;
+            const isMe = item.sender_id === user?.pi_uid;
             return (
               <View
                 style={[

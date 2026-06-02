@@ -54,13 +54,13 @@ export default function MessagesScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ["conversations", user?.uid],
-    queryFn: () => fetchConversations(user?.uid ?? ""),
+    queryKey: ["conversations", user?.pi_uid],
+    queryFn: () => fetchConversations(user?.pi_uid ?? ""),
     enabled: !!user,
   });
 
   const otherParticipant = (conv: Conversation) =>
-    conv.participant_1 === user?.uid
+    conv.participant_1 === user?.pi_uid
       ? conv.participant_2
       : conv.participant_1;
 

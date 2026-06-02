@@ -5,6 +5,7 @@ import { router, useLocalSearchParams, Stack } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -16,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { Listing } from "@/components/ListingCard";
@@ -31,11 +33,43 @@ async function fetchListing(id: string): Promise<Listing | null> {
   return data as Listing;
 }
 
+async function getOrCreateConversation(
+  currentUserId: string,
+  sellerId: string,
+  listingId: string
+): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
+  const { data: existing } = await supabase
+    .from("conversations")
+    .select("id")
+    .or(
+      `and(buyer_id.eq.${currentUserId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${currentUserId})`
+    )
+    .eq("listing_id", listingId)
+    .limit(1)
+    .single();
+  if (existing?.id) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from("conversations")
+    .insert({
+      buyer_id: currentUserId,
+      seller_id: sellerId,
+      listing_id: listingId,
+    })
+    .select("id")
+    .single();
+  if (error || !created) return null;
+  return created.id;
+}
+
 export default function ProductDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const [imageIndex, setImageIndex] = useState(0);
+  const [contactingLoading, setContactingLoading] = useState(false);
 
   const { data: listing, isLoading } = useQuery({
     queryKey: ["listing", id],
@@ -216,21 +250,50 @@ export default function ProductDetailScreen() {
           ]}
         >
           <Pressable
-            onPress={() => {
+            onPress={async () => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push(`/chat/${listing.seller_id}`);
+              if (!user) {
+                router.push("/login");
+                return;
+              }
+              if (listing.seller_id === user.pi_uid) {
+                Alert.alert("This is your listing", "You cannot contact yourself.");
+                return;
+              }
+              setContactingLoading(true);
+              try {
+                const convId = await getOrCreateConversation(
+                  user.pi_uid,
+                  listing.seller_id ?? "",
+                  listing.id
+                );
+                if (!convId) {
+                  Alert.alert("Error", "Could not open conversation. Please try again.");
+                  return;
+                }
+                router.push(`/chat/${convId}`);
+              } finally {
+                setContactingLoading(false);
+              }
             }}
+            disabled={contactingLoading}
             style={({ pressed }) => [
               styles.contactBtn,
               {
                 backgroundColor: colors.gold,
                 borderRadius: colors.radius,
-                opacity: pressed ? 0.85 : 1,
+                opacity: pressed || contactingLoading ? 0.75 : 1,
               },
             ]}
           >
-            <Feather name="message-circle" size={18} color="#000" />
-            <Text style={styles.contactBtnText}>Contact Seller</Text>
+            {contactingLoading ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <>
+                <Feather name="message-circle" size={18} color="#000" />
+                <Text style={styles.contactBtnText}>Contact Seller</Text>
+              </>
+            )}
           </Pressable>
         </View>
       )}

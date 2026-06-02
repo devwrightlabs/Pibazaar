@@ -60,7 +60,7 @@ export default function CreateScreen() {
         category,
         condition,
         city: city.trim(),
-        seller_id: user.uid,
+        seller_id: user.pi_uid,
         images: [],
         status: "active",
         is_boosted: false,

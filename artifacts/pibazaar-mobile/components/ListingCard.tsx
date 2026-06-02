@@ -22,7 +22,8 @@ export interface Listing {
   condition?: string;
   category?: string;
   is_boosted?: boolean;
-  seller_id?: string;
+  seller_id: string;
+  status?: string;
 }
 
 interface Props {

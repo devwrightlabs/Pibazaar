@@ -43,8 +43,8 @@ export default function DashboardScreen() {
   const { user } = useAuth();
 
   const { data: listings = [], isLoading, refetch } = useQuery({
-    queryKey: ["my-listings", user?.uid],
-    queryFn: () => fetchMyListings(user?.uid ?? ""),
+    queryKey: ["my-listings", user?.pi_uid],
+    queryFn: () => fetchMyListings(user?.pi_uid ?? ""),
     enabled: !!user,
   });
 
@@ -150,7 +150,7 @@ export default function DashboardScreen() {
                           styles.statusBadge,
                           {
                             backgroundColor:
-                              (STATUS_COLOR[item.status] || "#888") + "22",
+                              (STATUS_COLOR[item.status ?? ""] || "#888") + "22",
                             borderRadius: 20,
                           },
                         ]}
@@ -158,7 +158,7 @@ export default function DashboardScreen() {
                         <Text
                           style={[
                             styles.statusText,
-                            { color: STATUS_COLOR[item.status] || "#888" },
+                            { color: STATUS_COLOR[item.status ?? ""] || "#888" },
                           ]}
                         >
                           {item.status}
