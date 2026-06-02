@@ -1,0 +1,25 @@
+kind = "mobile"
+previewPath = "/pibazaar-mobile"
+title = "PiBazaar Mobile"
+version = "1.0.0"
+id = "artifacts/pibazaar-mobile"
+router = "path"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+name = "expo"
+paths = ["/pibazaar-mobile"]
+localPort = 8099
+
+[services.development]
+run = "pnpm --filter @workspace/pibazaar-mobile run dev"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/pibazaar-mobile", "run", "build"]
+serve = "pnpm --filter @workspace/pibazaar-mobile run serve"
+
+[services.env]
+PORT = "8099"
