@@ -1,0 +1,1 @@
+- [PiBazaar Migration](pibazaar-migration.md) — Next.js→Vite migration: key patterns, server lib stubs, and env var naming.
