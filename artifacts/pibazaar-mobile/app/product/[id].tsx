@@ -35,32 +35,32 @@ async function fetchListing(id: string): Promise<Listing | null> {
 
 async function getOrCreateConversation(
   currentUserId: string,
-  sellerId: string,
-  listingId: string
+  sellerId: string
 ): Promise<string | null> {
   if (!isSupabaseConfigured) return null;
+
   const { data: existing } = await supabase
     .from("conversations")
     .select("id")
     .or(
-      `and(buyer_id.eq.${currentUserId},seller_id.eq.${sellerId}),and(buyer_id.eq.${sellerId},seller_id.eq.${currentUserId})`
+      `and(participant_1.eq.${currentUserId},participant_2.eq.${sellerId}),and(participant_1.eq.${sellerId},participant_2.eq.${currentUserId})`
     )
-    .eq("listing_id", listingId)
     .limit(1)
     .single();
-  if (existing?.id) return existing.id;
+  if (existing?.id) return (existing as { id: string }).id;
 
   const { data: created, error } = await supabase
     .from("conversations")
     .insert({
-      buyer_id: currentUserId,
-      seller_id: sellerId,
-      listing_id: listingId,
+      participant_1: currentUserId,
+      participant_2: sellerId,
+      last_message: "",
+      last_message_at: new Date().toISOString(),
     })
     .select("id")
     .single();
   if (error || !created) return null;
-  return created.id;
+  return (created as { id: string }).id;
 }
 
 export default function ProductDetailScreen() {
@@ -264,8 +264,7 @@ export default function ProductDetailScreen() {
               try {
                 const convId = await getOrCreateConversation(
                   user.pi_uid,
-                  listing.seller_id ?? "",
-                  listing.id
+                  listing.seller_id ?? ""
                 );
                 if (!convId) {
                   Alert.alert("Error", "Could not open conversation. Please try again.");
