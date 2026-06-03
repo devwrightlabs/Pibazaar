@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   db,
   escrowTransactions,
@@ -17,6 +17,7 @@ import { serializeEscrow } from "../lib/serialize";
 import {
   approvePiPayment,
   completePiPayment,
+  getPiPayment,
   PiApiError,
 } from "../lib/pi";
 import { notify } from "../lib/notify";
@@ -51,10 +52,14 @@ async function loadParticipantEscrow(
   return row;
 }
 
+/** States from which an escrow can still be released to the seller. */
+const RELEASABLE_STATES = ["funded", "shipped", "delivered"] as const;
+
 /**
  * Release escrow funds (records revenue, credits the seller). When `complete`
  * is true the escrow is marked completed; otherwise released.
  */
+
 async function releaseEscrow(
   escrow: EscrowTransaction,
   opts: { auto?: boolean; complete?: boolean } = {},
@@ -63,6 +68,9 @@ async function releaseEscrow(
   const fee = feeFor(amount);
 
   return db.transaction(async (tx) => {
+    // Guard against double-release races: only transition from a releasable
+    // state. If a concurrent call already released it, no row is updated and we
+    // bail out before recording revenue twice.
     const [updated] = await tx
       .update(escrowTransactions)
       .set({
@@ -71,8 +79,17 @@ async function releaseEscrow(
         releasedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(escrowTransactions.id, escrow.id))
+      .where(
+        and(
+          eq(escrowTransactions.id, escrow.id),
+          inArray(escrowTransactions.status, [...RELEASABLE_STATES]),
+        ),
+      )
       .returning();
+
+    if (!updated) {
+      throw new HttpError(409, "Escrow has already been finalised");
+    }
 
     await tx.insert(platformRevenue).values({
       escrowId: escrow.id,
@@ -86,6 +103,41 @@ async function releaseEscrow(
 
     return updated;
   });
+}
+
+/**
+ * Validate that a Pi payment actually corresponds to this escrow before we
+ * approve/complete it. The client must create the Pi payment with
+ * `amount` = escrow amount and `metadata.escrowId` = escrow id.
+ */
+async function loadAndVerifyPayment(
+  paymentId: string,
+  escrow: EscrowTransaction,
+): Promise<void> {
+  let payment: Record<string, unknown>;
+  try {
+    payment = await getPiPayment(paymentId);
+  } catch (err) {
+    if (err instanceof PiApiError) throw new HttpError(err.status, err.message);
+    throw err;
+  }
+
+  const amount = Number(payment.amount);
+  if (
+    !Number.isFinite(amount) ||
+    Math.abs(amount - Number(escrow.amountPi)) > 0.0000001
+  ) {
+    throw new HttpError(400, "Payment amount does not match the escrow");
+  }
+
+  const meta = payment.metadata;
+  const boundEscrowId =
+    meta && typeof meta === "object"
+      ? (meta as Record<string, unknown>).escrowId
+      : undefined;
+  if (boundEscrowId !== escrow.id) {
+    throw new HttpError(400, "Payment is not bound to this escrow");
+  }
 }
 
 // ─── List my escrows ──────────────────────────────────────────────────────────
@@ -225,6 +277,7 @@ router.post(
       throw new HttpError(409, "Escrow is not awaiting payment");
 
     const paymentId = z.string().min(1).parse(req.body?.paymentId);
+    await loadAndVerifyPayment(paymentId, escrow);
     try {
       await approvePiPayment(paymentId);
     } catch (err) {
@@ -254,6 +307,7 @@ router.post(
     const body = z
       .object({ paymentId: z.string().min(1), txid: z.string().min(1) })
       .parse(req.body);
+    await loadAndVerifyPayment(body.paymentId, escrow);
     try {
       await completePiPayment(body.paymentId, body.txid);
     } catch (err) {
@@ -328,6 +382,8 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const escrow = await loadParticipantEscrow(param(req, "id"), req.user!.id);
+    if (escrow.sellerId !== req.user!.id)
+      throw new HttpError(403, "Only the seller can mark delivery");
     if (escrow.status !== "shipped")
       throw new HttpError(409, "Escrow must be shipped first");
 
@@ -424,48 +480,69 @@ router.post(
   "/escrow/:id/milestones/:milestoneId/release",
   requireAuth,
   asyncHandler(async (req, res) => {
+    // Authorize against the loaded row, then perform the mutation atomically
+    // inside a transaction that re-reads the row under a lock so concurrent
+    // milestone releases can't double-count revenue or seller sales.
     const escrow = await loadParticipantEscrow(param(req, "id"), req.user!.id);
     if (escrow.buyerId !== req.user!.id)
       throw new HttpError(403, "Only the buyer can release milestones");
     if (escrow.releaseType !== "digital" || !escrow.milestones?.length)
       throw new HttpError(400, "This escrow has no milestones");
-    if (!["funded", "delivered"].includes(escrow.status))
-      throw new HttpError(409, "Escrow must be funded");
 
-    const milestones = escrow.milestones.map((m) =>
-      m.id === param(req, "milestoneId") && m.status === "pending"
-        ? { ...m, status: "released" as const, releasedAt: new Date().toISOString() }
-        : m,
-    );
-    const target = milestones.find((m) => m.id === param(req, "milestoneId"));
-    if (!target) throw new HttpError(404, "Milestone not found");
+    const milestoneId = param(req, "milestoneId");
 
-    const allReleased = milestones.every((m) => m.status === "released");
-    const released = milestones.filter((m) => m.status === "released");
-    const feePortion = feeFor(released.reduce((a, m) => a + m.amountPi, 0));
+    const { updated, target } = await db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select()
+        .from(escrowTransactions)
+        .where(eq(escrowTransactions.id, escrow.id))
+        .for("update");
+      if (!fresh) throw new HttpError(404, "Escrow not found");
+      if (!["funded", "delivered"].includes(fresh.status))
+        throw new HttpError(409, "Escrow must be funded");
+      if (!fresh.milestones?.length)
+        throw new HttpError(400, "This escrow has no milestones");
 
-    const [updated] = await db
-      .update(escrowTransactions)
-      .set({
-        milestones,
-        status: allReleased ? "completed" : escrow.status,
-        platformFeePi: String(feePortion),
-        releasedAt: allReleased ? new Date() : escrow.releasedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(escrowTransactions.id, escrow.id))
-      .returning();
+      const current = fresh.milestones.find((m) => m.id === milestoneId);
+      if (!current) throw new HttpError(404, "Milestone not found");
+      if (current.status === "released")
+        throw new HttpError(409, "Milestone already released");
 
-    if (allReleased) {
-      await db
-        .update(users)
-        .set({ totalSales: sql`${users.totalSales} + 1`, updatedAt: new Date() })
-        .where(eq(users.id, escrow.sellerId));
-      await db.insert(platformRevenue).values({
-        escrowId: escrow.id,
-        amountPi: String(feePortion),
-      });
-    }
+      const milestones = fresh.milestones.map((m) =>
+        m.id === milestoneId
+          ? { ...m, status: "released" as const, releasedAt: new Date().toISOString() }
+          : m,
+      );
+      const releasedMs = milestones.find((m) => m.id === milestoneId)!;
+      const allReleased = milestones.every((m) => m.status === "released");
+      const released = milestones.filter((m) => m.status === "released");
+      const feePortion = feeFor(released.reduce((a, m) => a + m.amountPi, 0));
+
+      const [row] = await tx
+        .update(escrowTransactions)
+        .set({
+          milestones,
+          status: allReleased ? "completed" : fresh.status,
+          platformFeePi: String(feePortion),
+          releasedAt: allReleased ? new Date() : fresh.releasedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(escrowTransactions.id, escrow.id))
+        .returning();
+
+      if (allReleased) {
+        await tx
+          .update(users)
+          .set({ totalSales: sql`${users.totalSales} + 1`, updatedAt: new Date() })
+          .where(eq(users.id, escrow.sellerId));
+        await tx.insert(platformRevenue).values({
+          escrowId: escrow.id,
+          amountPi: String(feePortion),
+        });
+      }
+
+      return { updated: row, target: releasedMs };
+    });
 
     await notify(escrow.sellerId, {
       type: "escrow",

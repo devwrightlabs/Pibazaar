@@ -24,7 +24,7 @@ const router: IRouter = Router();
 // ─── Current user profile ─────────────────────────────────────────────────────
 
 router.get(
-  "/me",
+  "/users/me",
   requireAuth,
   asyncHandler(async (req, res) => {
     const [user] = await db
@@ -54,7 +54,7 @@ const updateProfileSchema = z.object({
 });
 
 router.patch(
-  "/me",
+  "/users/me",
   requireAuth,
   asyncHandler(async (req, res) => {
     const parsed = updateProfileSchema.safeParse(req.body);
@@ -86,7 +86,7 @@ router.patch(
 // ─── Own listings (including drafts) ──────────────────────────────────────────
 
 router.get(
-  "/me/listings",
+  "/users/me/listings",
   requireAuth,
   asyncHandler(async (req, res) => {
     const statusFilter =
@@ -111,7 +111,7 @@ router.get(
 // ─── Dashboard aggregates ─────────────────────────────────────────────────────
 
 router.get(
-  "/me/dashboard",
+  "/users/me/dashboard",
   requireAuth,
   asyncHandler(async (req, res) => {
     const uid = req.user!.id;

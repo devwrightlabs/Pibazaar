@@ -8,7 +8,7 @@ import { signAuthToken } from "../lib/jwt";
 import { verifyPiToken, PiApiError } from "../lib/pi";
 import { rateLimit } from "../lib/rateLimit";
 import { serializeSelf } from "../lib/serialize";
-import { requireAuth } from "../middlewares/auth";
+import { optionalAuth, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -118,6 +118,7 @@ const piSchema = z.object({
 router.post(
   "/auth/pi",
   authLimiter,
+  optionalAuth,
   asyncHandler(async (req, res) => {
     const parsed = piSchema.safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, "Missing accessToken");
@@ -131,7 +132,7 @@ router.post(
       throw err;
     }
 
-    const [existing] = await db
+    const [byPiUid] = await db
       .select()
       .from(users)
       .where(eq(users.piUid, piUser.uid))
@@ -140,19 +141,39 @@ router.post(
     let user: typeof users.$inferSelect;
     let isNewUser = false;
 
-    if (existing) {
-      if (existing.isSuspended) throw new HttpError(403, "Account suspended");
+    if (req.user) {
+      // Linking mode (step 2 of two-step auth): a manually-signed-up user is
+      // attaching their Pi identity. The Pi account must not already belong to
+      // a different user.
+      if (byPiUid && byPiUid.id !== req.user.id) {
+        throw new HttpError(409, "This Pi account is already linked to another user");
+      }
       [user] = await db
         .update(users)
         .set({
-          walletAddress: walletAddress ?? existing.walletAddress,
-          piWalletAddress: walletAddress ?? existing.piWalletAddress,
+          piUid: piUser.uid,
+          walletAddress: walletAddress ?? req.user.walletAddress,
+          piWalletAddress: walletAddress ?? req.user.piWalletAddress,
           isVerified: true,
           updatedAt: new Date(),
         })
-        .where(eq(users.id, existing.id))
+        .where(eq(users.id, req.user.id))
+        .returning();
+    } else if (byPiUid) {
+      // Returning Pi user logging in.
+      if (byPiUid.isSuspended) throw new HttpError(403, "Account suspended");
+      [user] = await db
+        .update(users)
+        .set({
+          walletAddress: walletAddress ?? byPiUid.walletAddress,
+          piWalletAddress: walletAddress ?? byPiUid.piWalletAddress,
+          isVerified: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, byPiUid.id))
         .returning();
     } else {
+      // First-time Pi sign-in with no prior manual account: provision one.
       isNewUser = true;
       const username = await generateUniqueUsername(piUser.username);
       [user] = await db

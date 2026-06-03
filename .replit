@@ -58,7 +58,6 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
-JWT_SECRET = "YFLfZ1IGBlKzTKzbVl8gLEuUGrArqIFnlc7gKY4ahoBnSQw4TUfHwj8uqJoQYSZ5"
 
 [nix]
 channel = "stable-25_05"

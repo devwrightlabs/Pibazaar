@@ -1,1 +1,3 @@
-- [PiBazaar Migration](pibazaar-migration.md) — Next.js→Vite migration: key patterns, server lib stubs, and env var naming.
+- [drizzle-zod + zod v4](drizzle-zod-zod-v4.md) — drizzle-zod 0.8.x emits zod **v4** schemas; schema files must `import { z } from "zod/v4"` or `z.infer` fails the type constraint.
+- [Express 5 route params](express5-route-params.md) — `req.params.x` is typed `string | string[]`; use the `param(req, name)` helper; literal routes (`/users/me`) must precede `/:id`.
+- [api-server stack](api-server-stack.md) — PiBazaar backend: Express + Drizzle + Replit Postgres, esbuild bundle (no typecheck at runtime), contract in artifacts/api-server/API_CONTRACT.md.
