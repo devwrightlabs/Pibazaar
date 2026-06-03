@@ -41,6 +41,7 @@ export default function LoginScreen() {
     login,
     signup,
     loginWithPi,
+    verifyPioneer,
     acceptToken,
     authError,
     clearError,
@@ -50,8 +51,8 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [piNotice, setPiNotice] = useState<string | null>(null);
 
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
@@ -63,6 +64,7 @@ export default function LoginScreen() {
   const switchMode = (next: Mode) => {
     Haptics.selectionAsync();
     clearError();
+    setPiNotice(null);
     setMode(next);
   };
 
@@ -72,14 +74,19 @@ export default function LoginScreen() {
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPiNotice(null);
     setBusy(true);
     try {
       if (mode === "signup") {
-        await signup({
-          username: username.trim(),
-          password,
-          email: email.trim() || undefined,
-        });
+        await signup({ username: username.trim(), password });
+        // Cleanly verify the new user is a Pioneer via the Pi SDK. Outside the
+        // Pi Browser this resolves to false and never blocks account creation.
+        const verified = await verifyPioneer();
+        if (!verified) {
+          setPiNotice(
+            "Account created. Open PiBazaar in the Pi Browser to verify your Pioneer status and unlock Pi payments.",
+          );
+        }
       } else {
         await login({ username: username.trim(), password });
       }
@@ -92,14 +99,14 @@ export default function LoginScreen() {
 
   const handlePiSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPiNotice(null);
     setBusy(true);
     try {
       await loginWithPi();
     } catch {
-      Alert.alert(
-        "Pi Browser Required",
-        "PiBazaar uses Pi Network authentication, which is only available inside the Pi Browser.\n\nYou can still sign up with a username and password, or open PiBazaar in your Pi Browser to use Pi login.",
-        [{ text: "OK" }],
+      // Gentle, non-blocking notice — never a destructive error on the web.
+      setPiNotice(
+        "Pi login is only available inside the Pi Browser. You can sign in with a username and password here, or open PiBazaar in the Pi Browser to use Pi.",
       );
     } finally {
       setBusy(false);
@@ -204,26 +211,6 @@ export default function LoginScreen() {
                 },
               ]}
             />
-            {mode === "signup" && (
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email (optional)"
-                placeholderTextColor={colors.mutedForeground}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.secondary,
-                    color: colors.text,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius / 2,
-                  },
-                ]}
-              />
-            )}
             <TextInput
               value={password}
               onChangeText={setPassword}
@@ -278,6 +265,24 @@ export default function LoginScreen() {
               <Feather name="alert-circle" size={14} color={colors.destructive} />
               <Text style={[styles.errorText, { color: colors.destructive }]}>
                 {authError}
+              </Text>
+            </View>
+          )}
+
+          {piNotice && (
+            <View
+              style={[
+                styles.noticeBox,
+                {
+                  backgroundColor: colors.gold + "18",
+                  borderColor: colors.gold + "55",
+                  borderRadius: colors.radius / 2,
+                },
+              ]}
+            >
+              <Feather name="info" size={14} color={colors.gold} />
+              <Text style={[styles.noticeText, { color: colors.text }]}>
+                {piNotice}
               </Text>
             </View>
           )}
@@ -437,6 +442,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  noticeBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 10,
+    borderWidth: 1,
+  },
+  noticeText: { flex: 1, fontSize: 13, lineHeight: 18 },
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   divider: { flex: 1, height: StyleSheet.hairlineWidth },
   dividerText: { fontSize: 12 },

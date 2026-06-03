@@ -50,6 +50,12 @@ interface AuthContextValue {
   login: (body: LoginBody) => Promise<void>;
   /** Triggers the Pi SDK flow; throws a friendly error outside the Pi Browser. */
   loginWithPi: () => Promise<void>;
+  /**
+   * Best-effort: verify the current user is a real Pioneer via the Pi SDK and
+   * link Pi to their account. Resolves to `false` (never throws) outside the Pi
+   * Browser so it can safely run right after signup without blocking anything.
+   */
+  verifyPioneer: () => Promise<boolean>;
   /** Complete /auth/pi with a real Pi access token (escape hatch). */
   acceptToken: (piAccessToken: string, opts?: { link?: boolean }) => Promise<void>;
   logout: () => Promise<void>;
@@ -92,6 +98,7 @@ const AuthContext = createContext<AuthContextValue>({
   signup: async () => {},
   login: async () => {},
   loginWithPi: async () => {},
+  verifyPioneer: async () => false,
   acceptToken: async () => {},
   logout: async () => {},
   refresh: async () => {},
@@ -209,13 +216,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithPi = useCallback(async () => {
     const pi = getPiSdk();
     if (!pi) {
-      setAuthError(PI_BROWSER_REQUIRED);
+      // Soft, non-destructive: callers surface this as a gentle info notice
+      // rather than a blocking error, so web testing is never interrupted.
       throw new Error(PI_BROWSER_REQUIRED);
     }
     setAuthError(null);
     const { accessToken } = await pi.authenticate(["username", "payments"]);
     await acceptToken(accessToken);
   }, [acceptToken]);
+
+  const verifyPioneer = useCallback(async () => {
+    const pi = getPiSdk();
+    // Outside the Pi Browser there is no SDK — skip silently, never block.
+    if (!pi) return false;
+    try {
+      const { accessToken } = await pi.authenticate(["username"]);
+      const { token, user: me } = await authApi.pi(
+        { accessToken },
+        { link: true },
+      );
+      await setToken(token);
+      setUser(me);
+      return true;
+    } catch {
+      // Verification is best-effort; the account is already created.
+      return false;
+    }
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -240,6 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signup,
         login,
         loginWithPi,
+        verifyPioneer,
         acceptToken,
         logout,
         refresh,

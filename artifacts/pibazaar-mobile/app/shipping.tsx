@@ -1,10 +1,8 @@
 import { Feather } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { router, Stack } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -17,29 +15,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
 import { useColors } from "@/hooks/useColors";
-import { useShippingCarriers } from "@/lib/api/hooks";
-import type { ServiceRange, ShippingCarrier } from "@/lib/api/types";
-
-const SECTIONS: { range: ServiceRange; label: string }[] = [
-  { range: "local", label: "Local" },
-  { range: "regional", label: "Regional" },
-  { range: "international", label: "International" },
-];
+import {
+  SERVICE_SECTIONS,
+  SHIPPING_DISCLAIMER,
+  filterCouriers,
+  groupByRange,
+  type Courier,
+} from "@/lib/shipping-data";
 
 export default function ShippingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const [country, setCountry] = useState("");
+  const [query, setQuery] = useState("");
 
-  const { data, isLoading } = useShippingCarriers(
-    country.trim() ? { country: country.trim() } : undefined,
+  // Pure client-side directory — no backend / external API calls.
+  const grouped = useMemo(() => groupByRange(filterCouriers(query)), [query]);
+  const hasResults = useMemo(
+    () => Object.values(grouped).some((list) => list.length > 0),
+    [grouped],
   );
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 24;
-
-  const grouped = data?.grouped;
-  const hasCarriers = (data?.carriers.length ?? 0) > 0;
 
   return (
     <>
@@ -64,84 +61,79 @@ export default function ShippingScreen() {
           <View style={styles.headerBtn} />
         </View>
 
-        {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.gold} />
-          </View>
-        ) : (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
-            keyboardShouldPersistTaps="handled"
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View
+            style={[
+              styles.disclaimer,
+              {
+                backgroundColor: colors.gold + "1A",
+                borderColor: colors.gold,
+                borderRadius: colors.radius,
+              },
+            ]}
           >
-            {data?.disclaimer ? (
-              <View
-                style={[
-                  styles.disclaimer,
-                  {
-                    backgroundColor: colors.destructive + "1A",
-                    borderColor: colors.destructive,
-                    borderRadius: colors.radius,
-                  },
-                ]}
-              >
-                <Feather name="alert-triangle" size={20} color={colors.destructive} />
-                <Text style={[styles.disclaimerText, { color: colors.text }]}>
-                  {data.disclaimer}
-                </Text>
-              </View>
-            ) : null}
+            <Feather name="info" size={20} color={colors.gold} />
+            <Text style={[styles.disclaimerText, { color: colors.text }]}>
+              {SHIPPING_DISCLAIMER}
+            </Text>
+          </View>
 
-            <View
-              style={[
-                styles.filter,
-                {
-                  backgroundColor: colors.secondary,
-                  borderColor: colors.border,
-                  borderRadius: colors.radius,
-                },
-              ]}
-            >
-              <Feather name="search" size={16} color={colors.mutedForeground} />
-              <TextInput
-                style={[styles.filterInput, { color: colors.text }]}
-                value={country}
-                onChangeText={setCountry}
-                placeholder="Filter by country code (e.g. US)"
-                placeholderTextColor={colors.mutedForeground}
-                autoCapitalize="characters"
-              />
-              {country.length > 0 && (
-                <Pressable onPress={() => setCountry("")} hitSlop={8}>
-                  <Feather name="x" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              )}
-            </View>
-
-            {!hasCarriers ? (
-              <EmptyState
-                icon="truck"
-                title="No carriers found"
-                subtitle="Try a different country or clear the filter."
-              />
-            ) : (
-              SECTIONS.map(({ range, label }) => {
-                const carriers = grouped?.[range] ?? [];
-                if (!carriers.length) return null;
-                return (
-                  <View key={range} style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
-                      {label}
-                    </Text>
-                    {carriers.map((carrier) => (
-                      <CarrierRow key={carrier.id} carrier={carrier} colors={colors} />
-                    ))}
-                  </View>
-                );
-              })
+          <View
+            style={[
+              styles.filter,
+              {
+                backgroundColor: colors.secondary,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Feather name="search" size={16} color={colors.mutedForeground} />
+            <TextInput
+              style={[styles.filterInput, { color: colors.text }]}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Filter by region or carrier (e.g. US, EU, DHL)"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+            />
+            {query.length > 0 && (
+              <Pressable onPress={() => setQuery("")} hitSlop={8}>
+                <Feather name="x" size={16} color={colors.mutedForeground} />
+              </Pressable>
             )}
-          </ScrollView>
-        )}
+          </View>
+
+          {!hasResults ? (
+            <EmptyState
+              icon="truck"
+              title="No carriers found"
+              subtitle="Try a different region or clear the filter."
+            />
+          ) : (
+            SERVICE_SECTIONS.map(({ range, label, hint }) => {
+              const carriers = grouped[range];
+              if (!carriers.length) return null;
+              return (
+                <View key={range} style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    {label}
+                  </Text>
+                  <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>
+                    {hint}
+                  </Text>
+                  {carriers.map((carrier) => (
+                    <CarrierRow key={carrier.id} carrier={carrier} colors={colors} />
+                  ))}
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
       </View>
     </>
   );
@@ -151,56 +143,56 @@ function CarrierRow({
   carrier,
   colors,
 }: {
-  carrier: ShippingCarrier;
+  carrier: Courier;
   colors: any;
 }) {
   return (
     <Pressable
       onPress={() => Linking.openURL(carrier.websiteUrl)}
-      style={[
+      style={({ pressed }) => [
         styles.row,
         {
           backgroundColor: colors.secondary,
           borderColor: colors.border,
           borderRadius: colors.radius,
+          opacity: pressed ? 0.85 : 1,
         },
       ]}
     >
       <View
         style={[
           styles.logoWrap,
-          { backgroundColor: colors.background, borderRadius: colors.radius },
+          { backgroundColor: colors.gold + "1A", borderRadius: colors.radius },
         ]}
       >
-        {carrier.logoUrl ? (
-          <Image
-            source={{ uri: carrier.logoUrl }}
-            style={styles.logo}
-            contentFit="contain"
-          />
-        ) : (
-          <Feather name="truck" size={22} color={colors.gold} />
-        )}
+        <Feather name="truck" size={22} color={colors.gold} />
       </View>
       <View style={styles.rowBody}>
-        <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-          {carrier.name}
-        </Text>
-        {carrier.countryName ? (
-          <Text style={[styles.country, { color: colors.mutedForeground }]}>
-            {carrier.countryName}
+        <View style={styles.nameRow}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+            {carrier.name}
           </Text>
-        ) : null}
-        {carrier.description ? (
-          <Text
-            style={[styles.description, { color: colors.mutedForeground }]}
-            numberOfLines={2}
+          <View
+            style={[
+              styles.regionPill,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
           >
-            {carrier.description}
-          </Text>
-        ) : null}
+            <Text style={[styles.regionText, { color: colors.mutedForeground }]}>
+              {carrier.region}
+            </Text>
+          </View>
+        </View>
+        <Text
+          style={[styles.description, { color: colors.mutedForeground }]}
+          numberOfLines={2}
+        >
+          {carrier.description}
+        </Text>
         <View style={styles.visit}>
-          <Text style={[styles.visitText, { color: colors.gold }]}>Visit site</Text>
+          <Text style={[styles.visitText, { color: colors.gold }]}>
+            Open carrier site
+          </Text>
           <Feather name="external-link" size={13} color={colors.gold} />
         </View>
       </View>
@@ -210,7 +202,6 @@ function CarrierRow({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -240,31 +231,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterInput: { flex: 1, fontSize: 14, padding: 0 },
-  section: { gap: 10 },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  section: { gap: 6 },
+  sectionTitle: { fontSize: 17, fontWeight: "800" },
+  sectionHint: { fontSize: 12, marginBottom: 4 },
   row: {
     flexDirection: "row",
     gap: 12,
     padding: 12,
     borderWidth: 1,
+    marginBottom: 8,
   },
   logoWrap: {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  logo: { width: 40, height: 40 },
-  rowBody: { flex: 1, gap: 3 },
-  name: { fontSize: 15, fontWeight: "700" },
-  country: { fontSize: 12 },
+  rowBody: { flex: 1, gap: 4 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  name: { fontSize: 15, fontWeight: "700", flexShrink: 1 },
+  regionPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  regionText: { fontSize: 10, fontWeight: "700" },
   description: { fontSize: 12, lineHeight: 16 },
-  visit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  visit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   visitText: { fontSize: 13, fontWeight: "600" },
 });

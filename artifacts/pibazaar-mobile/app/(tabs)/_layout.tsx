@@ -32,12 +32,25 @@ function NativeTabLayout() {
   );
 }
 
+type TabItem = {
+  name: string;
+  label: string;
+  feather: keyof typeof Feather.glyphMap;
+  sf: string;
+};
+
+const TAB_ITEMS: TabItem[] = [
+  { name: "index", label: "Home", feather: "home", sf: "house" },
+  { name: "browse", label: "Browse", feather: "search", sf: "magnifyingglass" },
+  { name: "messages", label: "Messages", feather: "message-circle", sf: "message" },
+  { name: "profile", label: "Profile", feather: "user", sf: "person" },
+];
+
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
-  const isWeb = Platform.OS === "web";
 
   return (
     <Tabs
@@ -45,80 +58,94 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarShowLabel: true,
+        tabBarItemStyle: { height: 56 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+        sceneStyle: { backgroundColor: colors.background },
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: isWeb ? 1 : StyleSheet.hairlineWidth,
-          borderTopColor: colors.border,
-          elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          left: 16,
+          right: 16,
+          bottom: Platform.select({ web: 16, default: 24 }),
+          height: 64,
+          paddingHorizontal: 8,
+          paddingTop: 6,
+          paddingBottom: 6,
+          borderRadius: 22,
+          backgroundColor: isIOS ? "transparent" : colors.card,
+          borderTopWidth: 0,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.border,
+          elevation: 12,
+          shadowColor: "#000",
+          shadowOpacity: isDark ? 0.4 : 0.12,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          overflow: "hidden",
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={90}
+              intensity={80}
               tint={isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
-          ) : isWeb ? (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
-            />
           ) : null,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
+      {TAB_ITEMS.map((item) => (
+        <Tabs.Screen
+          key={item.name}
+          name={item.name}
+          options={{
+            title: item.label,
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon item={item} color={color} focused={focused} isIOS={isIOS} />
             ),
-        }}
-      />
-      <Tabs.Screen
-        name="browse"
-        options={{
-          title: "Browse",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="magnifyingglass" tintColor={color} size={24} />
-            ) : (
-              <Feather name="search" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="message" tintColor={color} size={24} />
-            ) : (
-              <Feather name="message-circle" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person" tintColor={color} size={24} />
-            ) : (
-              <Feather name="user" size={22} color={color} />
-            ),
-        }}
-      />
+          }}
+        />
+      ))}
     </Tabs>
   );
 }
+
+function TabIcon({
+  item,
+  color,
+  focused,
+  isIOS,
+}: {
+  item: TabItem;
+  color: string;
+  focused: boolean;
+  isIOS: boolean;
+}) {
+  const colors = useColors();
+  return (
+    <View
+      style={[
+        styles.iconWrap,
+        focused && { backgroundColor: colors.gold + "1F" },
+      ]}
+    >
+      {isIOS ? (
+        <SymbolView name={item.sf as any} tintColor={color} size={22} />
+      ) : (
+        <Feather name={item.feather} size={20} color={color} />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  iconWrap: {
+    width: 44,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
 
 export default function TabLayout() {
   if (isLiquidGlassAvailable()) {
