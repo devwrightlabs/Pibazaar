@@ -103,11 +103,17 @@ New messages are pushed in realtime (see WebSocket) and create a notification fo
 | PATCH | `/addresses/:id` | yes (owner) | partial | `{ address }` |
 | DELETE | `/addresses/:id` | yes (owner) | — | `{ ok: true }` |
 
-## Shipping Options — `/shipping`
+## Shipping Directory — `/shipping`
+**Informational only.** PiBazaar does not manage, track, or facilitate shipping. Couriers are surfaced as outbound links grouped by coverage; all fulfillment/handling is arranged offline between buyer and seller. Clients MUST render the returned `disclaimer` prominently.
+
 | Method | Path | Auth | Query / Body | Response |
 |---|---|---|---|---|
-| GET | `/shipping/carriers` | no | `?countryCode=` | `{ carriers }` (geo courier directory w/ links) |
-| POST | `/shipping/carriers` | yes (admin) | carrier fields | `201 { carrier }` |
+| GET | `/shipping/carriers` | no | `?country=(ISO-2)`, `?serviceRange=(local\|regional\|international)` | `{ carriers, grouped, disclaimer }` |
+| POST | `/shipping/carriers` | yes (admin) | `{ name, countryCode(2), countryName?, serviceRange?(local\|regional\|international), websiteUrl, logoUrl?, description?, isActive?, sortOrder? }` | `201 { carrier }` |
+
+- Each carrier: `{ id, name, countryCode, countryName, serviceRange, websiteUrl, logoUrl, description, isActive, sortOrder }`. `websiteUrl` is the external portal the client links out to.
+- `grouped` is `{ local: [...], regional: [...], international: [...] }` — the same carriers pre-bucketed by `serviceRange` for clean directory sections.
+- `disclaimer` is a ready-to-display string stating fulfillment happens entirely offline.
 
 ## Object Storage — `/storage`
 | Method | Path | Auth | Notes |

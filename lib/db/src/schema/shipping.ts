@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgEnum,
   uuid,
   text,
   boolean,
@@ -9,6 +10,15 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { timestamps } from "./_shared";
+
+// Service range a courier covers. The shipping directory is purely informational:
+// the app never manages, tracks, or facilitates fulfillment — couriers are shown
+// as outbound links grouped by range, and all handling happens offline.
+export const shippingServiceRangeEnum = pgEnum("shipping_service_range", [
+  "local",
+  "regional",
+  "international",
+]);
 
 // Directory of external courier / shipping services, scoped by country so the
 // app can surface region-appropriate options (e.g. Bahamas -> GoPost, Mr. Ship It).
@@ -20,6 +30,10 @@ export const shippingCarriers = pgTable(
     // ISO-3166 alpha-2 country code this carrier serves (e.g. "BS").
     countryCode: text("country_code").notNull(),
     countryName: text("country_name"),
+    // Coverage category used to group couriers in the directory UI.
+    serviceRange: shippingServiceRangeEnum("service_range")
+      .notNull()
+      .default("local"),
     websiteUrl: text("website_url").notNull(),
     logoUrl: text("logo_url"),
     description: text("description"),
@@ -27,7 +41,10 @@ export const shippingCarriers = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },
-  (t) => [index("shipping_carriers_country_idx").on(t.countryCode)],
+  (t) => [
+    index("shipping_carriers_country_idx").on(t.countryCode),
+    index("shipping_carriers_range_idx").on(t.serviceRange),
+  ],
 );
 
 export const insertShippingCarrierSchema = createInsertSchema(

@@ -288,8 +288,15 @@ router.post(
     const [updated] = await db
       .update(escrowTransactions)
       .set({ piPaymentId: paymentId, updatedAt: new Date() })
-      .where(eq(escrowTransactions.id, escrow.id))
+      .where(
+        and(
+          eq(escrowTransactions.id, escrow.id),
+          eq(escrowTransactions.status, "pending"),
+        ),
+      )
       .returning();
+    if (!updated)
+      throw new HttpError(409, "Escrow is no longer awaiting payment");
     res.json({ escrow: serializeEscrow(updated) });
   }),
 );
@@ -323,8 +330,15 @@ router.post(
         piTxid: body.txid,
         updatedAt: new Date(),
       })
-      .where(eq(escrowTransactions.id, escrow.id))
+      .where(
+        and(
+          eq(escrowTransactions.id, escrow.id),
+          eq(escrowTransactions.status, "pending"),
+        ),
+      )
       .returning();
+    if (!updated)
+      throw new HttpError(409, "Escrow is no longer awaiting payment");
 
     await notify(escrow.sellerId, {
       type: "escrow",

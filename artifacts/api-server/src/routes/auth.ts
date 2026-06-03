@@ -14,6 +14,15 @@ const router: IRouter = Router();
 
 const authLimiter = rateLimit({ windowMs: 60_000, max: 20 });
 
+/** Postgres unique-constraint violation (e.g. concurrent piUid link/provision). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: string }).code === "23505"
+  );
+}
+
 function tokenFor(user: typeof users.$inferSelect): string {
   return signAuthToken({
     sub: user.id,
@@ -141,6 +150,7 @@ router.post(
     let user: typeof users.$inferSelect;
     let isNewUser = false;
 
+    try {
     if (req.user) {
       // Linking mode (step 2 of two-step auth): a manually-signed-up user is
       // attaching their Pi identity. The Pi account must not already belong to
@@ -186,6 +196,11 @@ router.post(
           isVerified: true,
         })
         .returning();
+    }
+    } catch (err) {
+      if (isUniqueViolation(err))
+        throw new HttpError(409, "This Pi account is already linked to another user");
+      throw err;
     }
 
     res.json({ token: tokenFor(user), isNewUser, user: serializeSelf(user) });
