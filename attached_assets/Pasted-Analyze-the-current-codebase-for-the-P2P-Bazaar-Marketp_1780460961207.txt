@@ -1,0 +1,31 @@
+Analyze the current codebase for the 'P2P Bazaar Marketplace'. The current architecture heavily depends on Supabase. Your task is to analyze the existing Supabase configuration to understand the fundamental logic, schema, and data relationships, and then completely migrate the backend to a new, self-contained database architecture. Build a complete, production-ready application executing the following strict requirements:
+
+1. DATABASE MIGRATION & RECONSTRUCTION
+- First, map and copy the logical structure of the existing Supabase database (tables, relationships, and data flow).
+- Second, completely strip out all Supabase dependencies, API calls, and configurations.
+- Third, implement a new, highly scalable, and self-contained database architecture natively (e.g., PostgreSQL) that does not rely on external third-party data services, using the exact same structural logic you just mapped.
+
+2. AUTHENTICATION (PI NETWORK SDK INTEGRATION)
+- DO NOT automate the initial user onboarding to avoid Pi Browser crashes. Implement a distinct, controlled two-step authentication flow:
+  a) Sign Up: Provide a manual, frictionless "Sign Up" interface for new users to register their account within the new internal database.
+  b) Log In: For returning users, implement a "Log In" button that triggers the Pi SDK call to securely retrieve their Pi ID/username and grant access.
+
+3. FACEBOOK MARKETPLACE STYLE PRODUCT UPLOAD FLOW
+- Completely replace the existing product upload interface with a frictionless flow modeled directly after Facebook Marketplace.
+- Media-First Order: Prioritize media placement by putting a prominent "Add Photos" upload section at the top. 
+- Streamlined Inputs: Keep text fields minimal: Title, Price (in Pi), and a short Description. Implement an auto-save "Draft" feature so users don't lose progress.
+- Visual Selection Taps: Use horizontal scrolling pills or quick-tap grid blocks for Category and Condition (New, Like New, Good, Fair) instead of clunky drop-down menus. 
+
+4. PRESERVE & EXPAND CORE BUSINESS LOGIC
+- Escrow System: Retain the existing escrow logic (holding funds until fulfillment). Expand it to support local meetup trades (e.g., releasing funds via QR code scan upon meeting) and digital commissions/milestones. 
+- Shipping Directory: There is no internal worldwide logistics programming. The app must display an informational "Shipping Options" directory with outbound link buttons to local couriers based on user geography (e.g., if in The Bahamas, display GoPost or Mr. Ship It). These buttons strictly redirect the user to external websites.
+
+5. ESSENTIAL MARKETPLACE FEATURES (NEW ADDITIONS)
+- User Dashboard: Create a centralized profile hub where users can manage their active listings, view drafted posts, and monitor the real-time status of their escrow funds.
+- Search & Discovery: Implement a robust search bar and filtering system so users can easily sort products by category, price, and condition.
+- In-App Messaging: Build a lightweight, real-time chat feature tied to specific product listings so buyers and sellers can communicate and arrange local meetups securely.
+
+6. UI/UX REDESIGN & STABILITY
+- Completely redesign the user interface. Fix all current layout overlap and formatting issues to ensure a clean, modern, single-screen scrolling, and fully responsive experience. 
+- Overhaul all buttons and components so they look sleek and professional, completely removing the current messy, overly "programmable" aesthetic. 
+- Implement clear UI Loading States (spinners/skeletons) during any database fetches or Pi SDK calls to ensure users know the app is processing data.
