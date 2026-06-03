@@ -2,7 +2,7 @@
  * Login — PiBazaar
  *
  * Two-step auth UI against the Express backend (`/api/auth/*`):
- *   1. Manual Sign Up / Log In (username + password, optional email on signup).
+ *   1. Manual Sign Up / Log In (username + password only).
  *   2. Optional "Log in with Pi" via the Pi SDK.
  *
  * All flows issue/persist our JWT through the shared auth provider. On success
@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [piLoading, setPiLoading] = useState(false)
 
@@ -50,7 +49,6 @@ export default function LoginPage() {
         await signup({
           username: username.trim(),
           password,
-          ...(email.trim() ? { email: email.trim() } : {}),
         })
       } else {
         await login({ username: username.trim(), password })
@@ -136,24 +134,6 @@ export default function LoginPage() {
                 disabled={busy}
               />
             </div>
-
-            {mode === 'signup' && (
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  Email <span className="text-muted-foreground">(optional)</span>
-                </label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
-            )}
 
             {authError && (
               <div
