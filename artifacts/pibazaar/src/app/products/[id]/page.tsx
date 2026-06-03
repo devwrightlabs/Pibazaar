@@ -1,143 +1,42 @@
 
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useParams, useLocation } from 'wouter'
 
-import { useStore } from '@/store/useStore'
+import { useListing, useStartConversation } from '@/lib/api/hooks'
+import { useAuth } from '@/components/providers/PiAuthProvider'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TrustBadge from '@/components/marketplace/TrustBadge'
-import MakeOfferModal from '@/components/MakeOfferModal'
+import VerifiedBadge from '@/components/VerifiedBadge'
+import type { ListingCondition } from '@/lib/api/types'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ProductDetail {
-  id: string
-  seller_id: string
-  title: string
-  description: string
-  price_in_pi: number
-  category: string
-  condition?: string
-  images: string[]
-  city: string
-  country: string
-  origin_country?: string
-  is_pro_seller?: boolean
-  product_type?: 'physical' | 'digital' | 'service'
-  created_at: string
-}
-
-type EscrowStep = 'payment_held' | 'under_review' | 'funds_released'
-
-const ESCROW_STEPS: { key: EscrowStep; label: string; icon: string }[] = [
-  { key: 'payment_held', label: 'Payment Held', icon: '🔒' },
-  { key: 'under_review', label: 'Under Review', icon: '🔍' },
-  { key: 'funds_released', label: 'Funds Released', icon: '✅' },
-]
-
-const CONDITION_LABELS: Record<string, string> = {
+const CONDITION_LABELS: Record<ListingCondition, string> = {
   new: 'New',
   like_new: 'Like New',
   good: 'Good',
   fair: 'Fair',
-  poor: 'Poor',
 }
-
-// ─── ProductDetailContent ─────────────────────────────────────────────────────
 
 function ProductDetailContent({ productId }: { productId: string }) {
   const [, navigate] = useLocation()
-  const { currentUser, openModal } = useStore()
-  const [product, setProduct] = useState<ProductDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
+  const { data, isLoading, isError, error, refetch } = useListing(productId)
+  const startConversation = useStartConversation()
+
+  const [activeImage, setActiveImage] = useState(0)
   const [imgError, setImgError] = useState(false)
-  const [currentStep, setCurrentStep] = useState<EscrowStep>('payment_held')
-  const [reviewLoading, setReviewLoading] = useState(false)
-  const [offerOpen, setOfferOpen] = useState(false)
+  const [messageOpen, setMessageOpen] = useState(false)
+  const [messageText, setMessageText] = useState('')
+  const [messageError, setMessageError] = useState<string | null>(null)
 
-  const fetchProduct = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/products/${encodeURIComponent(productId)}`)
-      if (!res.ok) throw new Error('Product not found')
-      const data = (await res.json()) as ProductDetail
-      setProduct(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load product')
-    } finally {
-      setLoading(false)
-    }
-  }, [productId])
-
-  useEffect(() => {
-    void fetchProduct()
-  }, [fetchProduct])
-
-  const handleRequestRevision = async () => {
-    if (!product) return
-    setReviewLoading(true)
-    try {
-      const res = await fetch(`/api/escrow/${encodeURIComponent(product.id)}/dispute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason: 'revision_requested',
-          description: 'Buyer has requested a revision of deliverables.',
-        }),
-      })
-      if (!res.ok) throw new Error('Request failed')
-      setCurrentStep('under_review')
-      openModal({
-        title: 'Revision Requested',
-        message: 'Your revision request has been submitted. The seller will be notified.',
-        variant: 'info',
-      })
-    } catch {
-      openModal({
-        title: 'Error',
-        message: 'Failed to submit revision request. Please try again.',
-        variant: 'alert',
-      })
-    } finally {
-      setReviewLoading(false)
-    }
-  }
-
-  const handleApproveRelease = async () => {
-    if (!product) return
-    setReviewLoading(true)
-    try {
-      const res = await fetch(`/api/escrow/${encodeURIComponent(product.id)}/confirm`, {
-        method: 'POST',
-      })
-      if (!res.ok) throw new Error('Approval failed')
-      setCurrentStep('funds_released')
-      openModal({
-        title: 'Pi Released',
-        message: 'Payment has been approved and Pi will be released to the seller.',
-        variant: 'info',
-      })
-    } catch {
-      openModal({
-        title: 'Error',
-        message: 'Failed to approve release. Please try again.',
-        variant: 'alert',
-      })
-    } finally {
-      setReviewLoading(false)
-    }
-  }
-
-  // Loading state with skeleton
-  if (loading) {
+  // Loading skeleton
+  if (isLoading) {
     return (
-      <main className="min-h-screen pb-8" style={{ backgroundColor: 'var(--color-bg)' }}>
-        <div className="px-4 pt-6 max-w-lg mx-auto space-y-4">
-          <Skeleton shape="line" className="h-8 w-24 rounded-lg" />
+      <main className="min-h-screen bg-background pb-24">
+        <div className="px-4 pt-6 max-w-2xl mx-auto space-y-4">
           <Skeleton shape="card" className="h-72 w-full rounded-2xl" />
           <Skeleton shape="line" className="h-6 w-3/4" />
           <Skeleton shape="line" className="h-8 w-1/3" />
@@ -149,335 +48,264 @@ function ProductDetailContent({ productId }: { productId: string }) {
     )
   }
 
-  // Error state
-  if (error || !product) {
+  // Error / not found
+  if (isError || !data) {
     return (
-      <main className="min-h-screen pb-8" style={{ backgroundColor: 'var(--color-bg)' }}>
+      <main className="min-h-screen bg-background pb-24">
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-          <p className="font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-            {error ?? 'Product not found'}
+          <p className="font-semibold mb-2 text-foreground">
+            {error instanceof Error ? error.message : 'Product not found'}
           </p>
-          <p className="text-sm mb-4" style={{ color: 'var(--color-subtext)' }}>
+          <p className="text-sm mb-4 text-muted-foreground">
             This listing may have been removed or is no longer available.
           </p>
-          <Button onClick={() => window.history.back()}>Go Back</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => refetch()}>Try Again</Button>
+            <Button onClick={() => navigate('/browse')}>Browse</Button>
+          </div>
         </div>
       </main>
     )
   }
 
-  const imageUrl = product.images?.[0]
-  const hasImage = Boolean(imageUrl) && !imgError
-  // Dual-check: product_type is the canonical field; category fallback supports
-  // listings that were created before the product_type column was added.
-  const isService = product.product_type === 'service' || product.category === 'Professional Services'
-  const currentUserSellerId = currentUser?.pi_uid
-  const isAuthenticated = Boolean(currentUserSellerId)
-  const isBuyer = isAuthenticated && currentUserSellerId !== product.seller_id
-  const currentStepIndex = ESCROW_STEPS.findIndex((s) => s.key === currentStep)
+  const { listing, seller } = data
+  const images = listing.images ?? []
+  const currentImage = images[activeImage]
+  const hasImage = Boolean(currentImage) && !imgError
+  const conditionLabel = listing.condition ? CONDITION_LABELS[listing.condition] : null
+  const isOwnListing = user?.id === listing.sellerId
+
+  const handleSendMessage = async () => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    if (!messageText.trim()) return
+    setMessageError(null)
+    try {
+      const res = await startConversation.mutateAsync({
+        recipientId: listing.sellerId,
+        listingId: listing.id,
+        content: messageText.trim(),
+      })
+      navigate(`/chat/${res.conversationId}`)
+    } catch (err) {
+      setMessageError(err instanceof Error ? err.message : 'Could not send message.')
+    }
+  }
 
   return (
-    <main className="min-h-screen pb-8" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="px-4 pt-6 max-w-lg mx-auto space-y-5">
+    <main className="min-h-screen bg-background pb-24">
+      <div className="px-4 pt-6 max-w-2xl mx-auto space-y-5">
         {/* Header */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => window.history.back()}
-            className="text-xl"
-            style={{ color: 'var(--color-gold)' }}
+            className="text-xl text-primary"
             aria-label="Go back"
           >
             ←
           </button>
-          <h1
-            className="text-xl font-bold flex-1"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
+          <h1 className="text-xl font-bold font-heading flex-1 text-foreground">
             Product Detail
           </h1>
-          {product.is_pro_seller && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
-              style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#8B5CF6' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path d="M6 1L7.5 4.2L11 4.7L8.5 7.1L9.1 10.6L6 9L2.9 10.6L3.5 7.1L1 4.7L4.5 4.2L6 1Z" fill="#8B5CF6" />
-                <path d="M4 6L5.5 7.5L8 5" stroke="#fff" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Pro Seller
-            </span>
-          )}
         </div>
 
-        {/* Product Image */}
+        {/* Image gallery */}
         <div
-          className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl"
-          style={{
-            border: product.is_pro_seller
-              ? '2px solid var(--color-gold)'
-              : '1px solid var(--color-border)',
-          }}
+          className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-card"
         >
           {hasImage ? (
-            <img src={imageUrl} alt={product.title} className="w-full h-full object-cover" onError={() => setImgError(true)} />
+            <img
+              src={currentImage}
+              alt={listing.title}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
           ) : (
-            <div
-              className="w-full h-full flex items-center justify-center text-5xl"
-              style={{ backgroundColor: 'var(--color-secondary-bg)' }}
-            >
+            <div className="w-full h-full flex items-center justify-center text-5xl bg-muted">
               📦
             </div>
           )}
-          {product.is_pro_seller && (
+          {listing.isProSeller && (
             <div className="absolute top-3 left-3 z-10">
               <TrustBadge size="md" />
             </div>
           )}
         </div>
 
-        {/* Product Info */}
+        {/* Thumbnails */}
+        {images.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {images.map((img, idx) => (
+              <button
+                key={img + idx}
+                onClick={() => {
+                  setActiveImage(idx)
+                  setImgError(false)
+                }}
+                className={`w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border-2 ${
+                  idx === activeImage ? 'border-primary' : 'border-border'
+                }`}
+              >
+                <img src={img} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Info */}
         <div className="space-y-2">
-          <h2
-            className="text-2xl font-bold"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
-            {product.title}
+          <h2 className="text-2xl font-bold font-heading text-foreground">
+            {listing.title}
           </h2>
-          <p className="text-3xl font-bold" style={{ color: 'var(--color-gold)' }}>
-            π {product.price_in_pi}
+          <p className="text-3xl font-bold text-primary">
+            {listing.priceInPi.toFixed(2)} π
           </p>
         </div>
 
-        {/* Details Card */}
-        <div className="rounded-xl p-4 space-y-2" style={{ backgroundColor: 'var(--color-card-bg)' }}>
-          {product.description && (
-            <p className="text-sm" style={{ color: 'var(--color-text)' }}>
-              {product.description}
+        {/* Details */}
+        <div className="rounded-xl p-4 space-y-3 bg-card border border-border">
+          {listing.description && (
+            <p className="text-sm text-foreground whitespace-pre-wrap">
+              {listing.description}
             </p>
           )}
-          <div className="flex flex-wrap gap-2 pt-2">
-            {product.category && (
-              <span
-                className="text-xs px-2.5 py-1 rounded-full font-medium"
-                style={{ backgroundColor: 'var(--color-secondary-bg)', color: 'var(--color-text)' }}
-              >
-                {product.category}
+          <div className="flex flex-wrap gap-2">
+            {listing.category && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-muted text-foreground">
+                {listing.category}
               </span>
             )}
-            {product.condition && CONDITION_LABELS[product.condition] && (
-              <span
-                className="text-xs px-2.5 py-1 rounded-full font-medium"
-                style={{ backgroundColor: 'var(--color-secondary-bg)', color: 'var(--color-text)' }}
-              >
-                {CONDITION_LABELS[product.condition]}
+            {conditionLabel && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-muted text-foreground">
+                {conditionLabel}
               </span>
             )}
-            {product.product_type && (
-              <span
-                className="text-xs px-2.5 py-1 rounded-full font-medium capitalize"
-                style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6' }}
-              >
-                {product.product_type}
+            {listing.productType && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium capitalize bg-muted text-foreground">
+                {listing.productType}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 pt-2">
-            <span className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-              📍 {product.city}, {product.country}
-            </span>
-            {product.origin_country && (
-              <span className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-                · Origin: {product.origin_country}
-              </span>
-            )}
-          </div>
+          {(listing.city || listing.country) && (
+            <p className="text-xs text-muted-foreground">
+              📍 {[listing.city, listing.country].filter(Boolean).join(', ')}
+              {listing.originCountry ? ` · Origin: ${listing.originCountry}` : ''}
+            </p>
+          )}
         </div>
 
-        {/* Escrow Transaction Progress */}
-        <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-card-bg)' }}>
-          <h3
-            className="font-semibold text-sm mb-4"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
-            Transaction Progress
-          </h3>
-          <div className="flex items-center justify-between">
-            {ESCROW_STEPS.map((step, idx) => {
-              const isCompleted = idx < currentStepIndex
-              const isActive = idx === currentStepIndex
-              const isFuture = idx > currentStepIndex
-
-              return (
-                <div key={step.key} className="flex items-center flex-1">
-                  {/* Step circle */}
-                  <div className="flex flex-col items-center flex-1">
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-base font-bold border-2"
-                      style={{
-                        backgroundColor: isActive
-                          ? 'var(--color-gold)'
-                          : isCompleted
-                          ? '#22C55E'
-                          : 'var(--color-secondary-bg)',
-                        borderColor: isActive
-                          ? 'var(--color-gold)'
-                          : isCompleted
-                          ? '#22C55E'
-                          : 'var(--color-border)',
-                        color: isActive || isCompleted ? '#000' : 'var(--color-subtext)',
-                      }}
-                    >
-                      {isCompleted ? '✓' : step.icon}
-                    </div>
-                    <p
-                      className="text-[10px] mt-1.5 text-center font-medium leading-tight"
-                      style={{
-                        color: isActive
-                          ? 'var(--color-gold)'
-                          : isCompleted
-                          ? '#22C55E'
-                          : isFuture
-                          ? 'var(--color-subtext)'
-                          : 'var(--color-text)',
-                      }}
-                    >
-                      {step.label}
-                    </p>
-                  </div>
-
-                  {/* Connector */}
-                  {idx < ESCROW_STEPS.length - 1 && (
-                    <div
-                      className="h-0.5 flex-1 mx-1 -mt-5"
-                      style={{
-                        backgroundColor: idx < currentStepIndex ? '#22C55E' : 'var(--color-border)',
-                      }}
-                    />
-                  )}
+        {/* Seller card */}
+        {seller && (
+          <div className="rounded-xl p-4 bg-card border border-border">
+            <h3 className="font-semibold text-sm mb-3 font-heading text-foreground">
+              Seller
+            </h3>
+            <button
+              onClick={() => navigate(`/profile`)}
+              className="flex items-center gap-3 w-full text-left"
+            >
+              <div className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center bg-primary text-primary-foreground font-bold">
+                {seller.avatarUrl ? (
+                  <img src={seller.avatarUrl} alt={seller.username} className="w-full h-full object-cover" />
+                ) : (
+                  seller.username.charAt(0).toUpperCase()
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-foreground truncate">
+                    {seller.username}
+                  </span>
+                  {seller.isVerified && <VerifiedBadge size="sm" />}
                 </div>
-              )
-            })}
+                <p className="text-xs text-muted-foreground">
+                  Trust score {seller.trustScore.toFixed(1)} · {seller.totalSales} sales
+                </p>
+              </div>
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* Review Deliverables — for Services, always show; for others, show when relevant */}
-        {isBuyer && (isService || currentStep !== 'funds_released') && (
-          <div
-            className="rounded-xl p-4 space-y-4"
-            style={{
-              backgroundColor: 'var(--color-card-bg)',
-              border: '1px solid rgba(139, 92, 246, 0.2)',
-            }}
-          >
-            <h3
-              className="font-semibold text-sm"
-              style={{ fontFamily: 'Sora, sans-serif', color: '#8B5CF6' }}
+        {/* Actions */}
+        {!isOwnListing && (
+          <div className="space-y-3">
+            <Button
+              size="lg"
+              className="w-full rounded-xl"
+              onClick={() => navigate(`/checkout/${listing.id}`)}
             >
-              {isService ? '📋 Review Deliverables' : '📦 Review Deliverables'}
-            </h3>
-            <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-              {isService
-                ? 'Review the service deliverables before approving payment release.'
-                : 'Review the received item before confirming and releasing payment.'}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleRequestRevision}
-                disabled={reviewLoading}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-95"
-                style={{
-                  backgroundColor: 'transparent',
-                  color: 'var(--color-gold)',
-                  border: '1px solid rgba(240, 192, 64, 0.4)',
-                  opacity: reviewLoading ? 0.6 : 1,
+              Buy with {listing.priceInPi.toFixed(2)} π
+            </Button>
+
+            {!messageOpen ? (
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full rounded-xl"
+                onClick={() => {
+                  if (!user) {
+                    navigate('/login')
+                    return
+                  }
+                  setMessageOpen(true)
                 }}
               >
-                Request Revision
-              </button>
-              <button
-                onClick={handleApproveRelease}
-                disabled={reviewLoading}
-                className="flex-1 py-3 rounded-xl text-sm font-bold transition-all duration-150 active:scale-95"
-                style={{
-                  backgroundColor: '#22C55E',
-                  color: '#fff',
-                  opacity: reviewLoading ? 0.6 : 1,
-                }}
-              >
-                Approve & Release Pi
-              </button>
-            </div>
+                💬 Message Seller
+              </Button>
+            ) : (
+              <div className="rounded-xl p-4 bg-card border border-border space-y-3">
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  placeholder="Write a message to the seller…"
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-background text-foreground border border-border focus:border-primary resize-none"
+                />
+                {messageError && (
+                  <p className="text-xs text-destructive">{messageError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setMessageOpen(false)}
+                    disabled={startConversation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => void handleSendMessage()}
+                    disabled={startConversation.isPending || !messageText.trim()}
+                  >
+                    {startConversation.isPending ? <Spinner /> : 'Send'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Shipping Details — for physical products only, hidden for services */}
-        {!isService && (
-          <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--color-card-bg)' }}>
-            <h3
-              className="font-semibold text-sm mb-2"
-              style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-            >
-              📦 Shipping Details
-            </h3>
-            <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-              Shipping information will be available once the seller dispatches the item.
+        {isOwnListing && (
+          <div className="rounded-xl p-4 bg-card border border-border text-center">
+            <p className="text-sm text-muted-foreground">
+              This is your listing. Manage it from your{' '}
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-primary font-semibold underline"
+              >
+                dashboard
+              </button>
+              .
             </p>
           </div>
         )}
-
-        {/* Buy Button */}
-        <Button
-          size="lg"
-          className="w-full rounded-xl"
-          onClick={() => navigate(`/checkout/${product.id}`)}
-        >
-          Buy with π {product.price_in_pi}
-        </Button>
-
-        {/* Make Offer Button — only for buyers */}
-        {isBuyer && (
-          <button
-            onClick={() => setOfferOpen(true)}
-            className="w-full border border-[#F0C040] text-[#F0C040] bg-transparent rounded-xl px-4 py-3 font-semibold text-sm transition-all duration-150 active:scale-95"
-          >
-            💰 Make an Offer
-          </button>
-        )}
-
-        {/* Message Seller */}
-        <button
-          onClick={() => navigate('/chat')}
-          className="w-full py-3 rounded-xl font-semibold text-sm"
-          style={{
-            backgroundColor: 'var(--color-card-bg)',
-            color: 'var(--color-gold)',
-            border: '1px solid rgba(240, 192, 64, 0.3)',
-          }}
-        >
-          💬 Message Seller
-        </button>
       </div>
-
-      {/* Make Offer Modal */}
-      <MakeOfferModal
-        listing={{
-          id: product.id,
-          title: product.title,
-          price_in_pi: product.price_in_pi,
-          seller_id: product.seller_id,
-        }}
-        isOpen={offerOpen}
-        onClose={() => setOfferOpen(false)}
-        onSuccess={() => {
-          setOfferOpen(false)
-        }}
-      />
     </main>
   )
 }
-
-// ─── Page Component ───────────────────────────────────────────────────────────
-
 
 export default function ProductDetailPage() {
   const { id: productId } = useParams<{ id: string }>()

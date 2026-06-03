@@ -1,123 +1,121 @@
-
-
 import { useState } from 'react'
-import { useLocation } from 'wouter'
-import { supabase } from '@/lib/supabase'
-import type { UserProfile } from '@/lib/types'
-import UserSearch from '@/components/UserSearch'
-import ErrorBoundary from '@/components/ErrorBoundary'
-import { useStore } from '@/store/useStore'
+import { useLocation, useSearch, Link } from 'wouter'
+import { useAuth } from '@/components/providers/PiAuthProvider'
+import { useStartConversation, useUser } from '@/lib/api/hooks'
+import { Button } from '@/components/ui/button'
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from '@/components/ui/empty'
 
 export default function NewMessagePage() {
   const [, navigate] = useLocation()
-  const { currentUser } = useStore()
-  const [creating, setCreating] = useState(false)
+  const search = useSearch()
+  const params = new URLSearchParams(search)
+  const recipientId = params.get('recipientId') ?? undefined
+  const listingId = params.get('listingId') ?? undefined
+
+  const { user, isAuthenticated } = useAuth()
+  const { data: recipientData } = useUser(recipientId)
+  const startConversation = useStartConversation()
+  const [content, setContent] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const handleSelectUser = async (selectedUser: UserProfile) => {
-    if (!currentUser) {
-      setError('Please connect your Pi Wallet first')
-      return
-    }
-    if (selectedUser.id === currentUser.id) {
-      setError('You cannot message yourself')
-      return
-    }
+  const recipientName = recipientData?.user?.username
 
-    setCreating(true)
+  const handleSend = async () => {
+    if (!recipientId || !content.trim()) return
     setError(null)
     try {
-      const { data: existing } = await supabase
-        .from('conversations')
-        .select('id')
-        .or(
-          `and(participant_1.eq.${currentUser.id},participant_2.eq.${selectedUser.id}),and(participant_1.eq.${selectedUser.id},participant_2.eq.${currentUser.id})`
-        )
-        .single()
-
-      if (existing) {
-        navigate(`/chat/${(existing as { id: string }).id}`)
-        return
-      }
-
-      const { data: newConv, error: createError } = await supabase
-        .from('conversations')
-        .insert({
-          participant_1: currentUser.id,
-          participant_2: selectedUser.id,
-          last_message: '',
-          last_message_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
-
-      if (createError) throw createError
-      navigate(`/chat/${(newConv as { id: string }).id}`)
-    } catch (err) {
-      console.error('Failed to create conversation:', err)
-      setError('Failed to start conversation. Please try again.')
-    } finally {
-      setCreating(false)
+      const { conversationId } = await startConversation.mutateAsync({
+        recipientId,
+        listingId,
+        content: content.trim(),
+      })
+      navigate(`/chat/${conversationId}`)
+    } catch {
+      setError('Could not start the conversation. Please try again.')
     }
   }
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="px-4 pt-6 pb-4">
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-2xl px-4 pt-6 pb-24">
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => navigate('/chat')}
-            className="text-2xl"
+            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
             aria-label="Back"
           >
-            ←
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
           </button>
-          <h1
-            className="text-2xl font-bold"
-            style={{ fontFamily: 'Sora, sans-serif', color: '#ffffff' }}
-          >
-            New Message
-          </h1>
+          <h1 className="font-heading text-2xl font-bold text-foreground">New Message</h1>
         </div>
 
-        <ErrorBoundary>
-          {!currentUser ? (
-            <div className="text-center py-12">
-              
-              <p style={{ color: 'var(--color-subtext)' }}>Connect your Pi Wallet to send messages</p>
-              <button
-                onClick={() => navigate('/profile')}
-                className="mt-4 px-6 py-3 rounded-xl font-semibold"
-                style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
+        {!isAuthenticated || !user ? (
+          <Empty className="border border-border">
+            <EmptyHeader>
+              <EmptyTitle>Log in to send messages</EmptyTitle>
+              <EmptyDescription>Sign in to start a conversation.</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Link href="/login">
+                <Button>Log in</Button>
+              </Link>
+            </EmptyContent>
+          </Empty>
+        ) : recipientId && recipientId !== user.id ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Send a message to{' '}
+              <span className="font-semibold text-foreground">
+                @{recipientName ?? 'this user'}
+              </span>
+            </p>
+            {error && (
+              <div
+                className="p-3 rounded-xl text-sm"
+                style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--color-error)' }}
               >
-                Go to Profile
-              </button>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm mb-4" style={{ color: 'var(--color-subtext)' }}>
-                Search for a user to start a conversation
-              </p>
-              {error && (
-                <div
-                  className="mb-4 p-3 rounded-xl text-sm"
-                  style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--color-error)' }}
-                >
-                  {error}
-                </div>
-              )}
-              {creating && (
-                <div className="text-center py-4">
-                  <p style={{ color: 'var(--color-subtext)' }}>Creating conversation...</p>
-                </div>
-              )}
-              <UserSearch
-                onSelectUser={(user) => { void handleSelectUser(user) }}
-                excludeUserId={currentUser.id}
-              />
-            </>
-          )}
-        </ErrorBoundary>
+                {error}
+              </div>
+            )}
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write your message…"
+              rows={4}
+              className="w-full px-4 py-3 rounded-xl text-sm resize-none outline-none bg-card text-foreground placeholder:text-muted-foreground border border-border"
+            />
+            <Button
+              onClick={() => void handleSend()}
+              disabled={!content.trim() || startConversation.isPending}
+              loading={startConversation.isPending}
+            >
+              Send message
+            </Button>
+          </div>
+        ) : (
+          <Empty className="border border-border">
+            <EmptyHeader>
+              <EmptyTitle>Start from a listing</EmptyTitle>
+              <EmptyDescription>
+                Conversations begin from a listing’s “Message seller” button. Browse the
+                marketplace and reach out to a seller to start chatting.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Link href="/browse">
+                <Button>Browse listings</Button>
+              </Link>
+            </EmptyContent>
+          </Empty>
+        )}
       </div>
     </main>
   )

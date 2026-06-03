@@ -1,7 +1,18 @@
 
 
 import { useEffect } from 'react'
-import type { ModalProps } from '@/lib/types'
+
+export type ModalVariant = 'alert' | 'confirm' | 'info'
+
+export interface ModalProps {
+  isOpen: boolean
+  title: string
+  message: string
+  variant?: ModalVariant
+  onConfirm?: () => void
+  onCancel?: () => void
+  onClose: () => void
+}
 
 export default function Modal({
   isOpen,

@@ -1,117 +1,176 @@
-
-
-import { useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'wouter'
-import type { CreateListingForm, ScrapedListing } from '@/lib/types'
-import type { ProductType } from '@/lib/types'
 import { useStore } from '@/store/useStore'
+import { useAuth } from '@/components/providers/PiAuthProvider'
+import { listingsApi, ApiError } from '@/lib/api/client'
+import { useUpdateListing } from '@/lib/api/hooks'
 import PhotoUploader from '@/components/PhotoUploader'
-import ListingPreviewCard from '@/components/ListingPreviewCard'
-import ConditionSelector from '@/components/ConditionSelector'
-import CategoryDropdown from '@/components/CategoryDropdown'
-import PiPriceInput from '@/components/PiPriceInput'
-import AISuggestButton from '@/components/AISuggestButton'
-import LocationPicker from '@/components/LocationPicker'
-import FastSellerAgreement from '@/components/FastSellerAgreement'
-import URLImportForm from '@/components/URLImportForm'
-import LoadingSkeleton from '@/components/LoadingSkeleton'
-import ErrorBoundary from '@/components/ErrorBoundary'
-import ShippingSelector from '@/components/ShippingSelector'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Spinner } from '@/components/ui/spinner'
+import type {
+  ListingDraft,
+  ListingInput,
+  ListingCondition,
+  ProductType,
+  ListingStatus,
+} from '@/lib/api/types'
 
-const INITIAL_FORM: CreateListingForm = {
-  title: '',
-  description: '',
-  price_in_pi: 0,
-  category: '',
-  condition: 'new',
-  images: [],
-  location_city: '',
-  location_country: '',
-  allow_offers: true,
-  fast_seller_agreed: false,
-  product_type: 'physical',
-  shipping: { category: 'local', carrier: 'nassau_courier' },
-}
+const CATEGORIES = [
+  'Electronics',
+  'Clothing',
+  'Home & Garden',
+  'Sports',
+  'Toys',
+  'Books',
+  'Automotive',
+  'Art',
+  'Collectibles',
+  'Music',
+  'Jewelry',
+  'Health & Beauty',
+  'Food & Drink',
+  'Services',
+  'Other',
+]
 
-type Tab = 'manual' | 'url'
+const CONDITIONS: { key: ListingCondition; label: string }[] = [
+  { key: 'new', label: 'New' },
+  { key: 'like_new', label: 'Like New' },
+  { key: 'good', label: 'Good' },
+  { key: 'fair', label: 'Fair' },
+]
 
-function CharCounter({ value, max }: { value: string; max: number }) {
-  const count = value.length
-  const near = count >= max * 0.9
-  return (
-    <span
-      className="text-xs"
-      style={{ color: near ? 'var(--color-error)' : 'var(--color-subtext)' }}
-    >
-      {count}/{max}
-    </span>
-  )
+const PRODUCT_TYPES: { key: ProductType; label: string; desc: string }[] = [
+  { key: 'physical', label: 'Physical', desc: 'Ships to buyer' },
+  { key: 'digital', label: 'Digital', desc: 'Delivered online' },
+  { key: 'service', label: 'Service', desc: 'Performed for buyer' },
+]
+
+const AUTOSAVE_DELAY = 800
+
+function buildInput(draft: ListingDraft, status: ListingStatus): ListingInput {
+  return {
+    title: draft.title.trim(),
+    description: draft.description.trim(),
+    priceInPi: draft.priceInPi,
+    category: draft.category,
+    condition: draft.condition,
+    productType: draft.productType,
+    images: draft.images,
+    city: draft.city.trim(),
+    country: draft.country.trim(),
+    allowOffers: draft.allowOffers,
+    shippingCarrier: draft.shippingCarrier ?? undefined,
+    status,
+  }
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label
-      className="block text-sm font-medium mb-1.5"
-      style={{ color: 'var(--color-text)', fontFamily: 'Sora, sans-serif' }}
-    >
+    <label className="mb-1.5 block font-heading text-sm font-medium text-foreground">
       {children}
     </label>
   )
 }
 
-function inputStyle(): React.CSSProperties {
-  return {
-    backgroundColor: 'var(--color-bg)',
-    color: 'var(--color-text)',
-    border: '1px solid rgba(136,136,136,0.3)',
-  }
+function Pill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+        active
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-border bg-card text-foreground hover:border-primary'
+      }`}
+    >
+      {children}
+    </button>
+  )
 }
 
 export default function CreateListingPage() {
   const [, navigate] = useLocation()
-  const { currentUser, openModal } = useStore()
-  const [activeTab, setActiveTab] = useState<Tab>('manual')
-  const [form, setForm] = useState<CreateListingForm>(INITIAL_FORM)
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const { draft, setDraft, clearDraft, openModal } = useStore()
+  const updateListing = useUpdateListing()
+
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [publishing, setPublishing] = useState(false)
-  const [previewCollapsed, setPreviewCollapsed] = useState(false)
 
-  const update = useCallback(<K extends keyof CreateListingForm>(key: K, value: CreateListingForm[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-  }, [])
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const creatingRef = useRef(false)
 
-  const handleURLImport = (data: Partial<ScrapedListing> & { piPrice?: number }) => {
-    setForm((prev) => ({
-      ...prev,
-      title: data.title ?? prev.title,
-      description: data.description ?? prev.description,
-      price_in_pi: data.piPrice ?? prev.price_in_pi,
-      images: data.images && data.images.length > 0 ? data.images : prev.images,
-    }))
-    // Switch to manual tab so user can review/edit
-    setActiveTab('manual')
-  }
+  const update = useCallback(
+    (patch: Partial<ListingDraft>) => setDraft(patch),
+    [setDraft],
+  )
+
+  // Require auth — redirect to /login once we know the user isn't signed in.
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) navigate('/login')
+  }, [authLoading, isAuthenticated, navigate])
+
+  // Debounced draft autosave: create once (status:draft), then PATCH on edits.
+  useEffect(() => {
+    if (!isAuthenticated || publishing) return
+
+    const meaningful =
+      draft.title.trim().length > 0 ||
+      draft.images.length > 0 ||
+      draft.priceInPi > 0 ||
+      draft.description.trim().length > 0
+    if (!meaningful) return
+
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      void (async () => {
+        if (creatingRef.current || publishing) return
+        const body = buildInput(draft, 'draft')
+        try {
+          setSaveState('saving')
+          if (!draft.serverId) {
+            creatingRef.current = true
+            const { listing } = await listingsApi.create(body)
+            setDraft({ serverId: listing.id })
+            creatingRef.current = false
+          } else {
+            await updateListing.mutateAsync({ id: draft.serverId, body })
+          }
+          setSaveState('saved')
+        } catch {
+          creatingRef.current = false
+          setSaveState('idle')
+        }
+      })()
+    }, AUTOSAVE_DELAY)
+
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, isAuthenticated, publishing])
 
   const validate = (): string | null => {
-    if (!form.title.trim()) return 'Title is required'
-    if (form.price_in_pi <= 0) return 'Price must be greater than 0'
-    if (!form.category) return 'Please select a category'
-    if (!form.condition) return 'Please select a condition'
-    if (!form.description.trim()) return 'Description is required'
-    if (form.images.length === 0) return 'At least one photo is required'
-    if (!form.fast_seller_agreed) return 'You must agree to the Fast Seller Agreement'
+    if (!draft.title.trim()) return 'Title is required'
+    if (draft.priceInPi <= 0) return 'Price must be greater than 0'
+    if (!draft.category) return 'Please select a category'
+    if (!draft.description.trim()) return 'Description is required'
+    if (draft.images.length === 0) return 'At least one photo is required'
     return null
   }
 
   const handlePublish = async () => {
-    if (!currentUser) {
-      openModal({
-        title: 'Not logged in',
-        message: 'Please connect your Pi Wallet before publishing a listing.',
-        variant: 'alert',
-      })
-      return
-    }
-
     const validationError = validate()
     if (validationError) {
       openModal({
@@ -122,373 +181,222 @@ export default function CreateListingPage() {
       return
     }
 
+    if (saveTimer.current) clearTimeout(saveTimer.current)
     setPublishing(true)
     try {
-      const token = localStorage.getItem('pibazaar-token')
-      if (!token) {
-        throw new Error('Authentication token not found. Please sign in again.')
+      const body = buildInput(draft, 'active')
+      let id = draft.serverId
+      if (id) {
+        await updateListing.mutateAsync({ id, body })
+      } else {
+        const { listing } = await listingsApi.create(body)
+        id = listing.id
       }
-
-      const res = await fetch('/api/products', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: form.title.trim(),
-          description: form.description.trim(),
-          price_in_pi: form.price_in_pi,
-          category: form.category,
-          condition: form.condition,
-          images: form.images,
-          city: form.location_city.trim(),
-          country: form.location_country.trim(),
-        }),
-      })
-
-      if (!res.ok) {
-        let errorMessage = `Server returned ${res.status}`
-        try {
-          const data = (await res.json()) as { error?: string }
-          if (data.error) errorMessage = data.error
-        } catch {
-          // Response body was not valid JSON; use status-based message.
-        }
-        throw new Error(errorMessage)
-      }
-
-      openModal({
-        title: 'Listing published!',
-        message: 'Your listing is now live on PiBazaar.',
-        variant: 'info',
-      })
-      setForm(INITIAL_FORM)
-      navigate(`/browse`)
+      clearDraft()
+      navigate(id ? `/products/${id}` : '/dashboard')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to publish listing'
+      const msg =
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : 'Failed to publish listing'
       openModal({
         title: 'Publish failed',
         message: `${msg} Please try again.`,
-        variant: 'confirm',
-        onConfirm: () => void handlePublish(),
-        onCancel: () => setPublishing(false),
+        variant: 'alert',
       })
       setPublishing(false)
     }
   }
 
   const canPublish =
-    form.title.trim().length > 0 &&
-    form.price_in_pi > 0 &&
-    form.category.length > 0 &&
-    form.description.trim().length > 0 &&
-    form.images.length > 0 &&
-    form.fast_seller_agreed &&
+    draft.title.trim().length > 0 &&
+    draft.priceInPi > 0 &&
+    draft.category.length > 0 &&
+    draft.description.trim().length > 0 &&
+    draft.images.length > 0 &&
     !publishing
 
+  if (authLoading || !isAuthenticated) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <Spinner className="size-6 text-primary" />
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="px-4 pt-6 pb-4">
+    <main className="min-h-screen bg-background text-foreground pb-24">
+      <div className="mx-auto max-w-2xl px-4 pt-6">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => window.history.back()}
-            className="text-2xl"
-            aria-label="Go back"
-          >
-            &#8592;
-          </button>
-          <h1
-            className="text-2xl font-bold"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
-            Create Listing
-          </h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="font-heading text-2xl font-bold">Sell an item</h1>
+          <div className="flex h-6 items-center text-xs text-muted-foreground">
+            {saveState === 'saving' && (
+              <span className="flex items-center gap-1.5">
+                <Spinner className="size-3" /> Saving…
+              </span>
+            )}
+            {saveState === 'saved' && <span>Draft saved</span>}
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div
-          className="flex rounded-xl mb-6 overflow-hidden"
-          style={{ backgroundColor: 'var(--color-card-bg)' }}
-        >
-          {(['manual', 'url'] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="flex-1 py-3 text-sm font-semibold transition-colors"
-              style={{
-                backgroundColor: activeTab === tab ? 'var(--color-gold)' : 'transparent',
-                color: activeTab === tab ? '#000' : 'var(--color-subtext)',
-              }}
-            >
-              {tab === 'manual' ? 'Manual' : 'URL Import'}
-            </button>
-          ))}
-        </div>
+        <div className="space-y-6">
+          {/* Step 1 — Photos */}
+          <div>
+            <FieldLabel>Photos</FieldLabel>
+            <PhotoUploader
+              photos={draft.images}
+              onPhotosChange={(images) => update({ images })}
+            />
+          </div>
 
-        <ErrorBoundary>
-          {/* Desktop 2-column layout */}
-          <div className="lg:grid lg:grid-cols-2 lg:gap-8">
-            {/* Left — Form */}
-            <div className="space-y-5">
-              {activeTab === 'url' ? (
-                <URLImportForm onImported={handleURLImport} />
-              ) : (
-                <>
-                  {/* Photos */}
-                  <div>
-                    <FieldLabel>Photos</FieldLabel>
-                    <PhotoUploader
-                      photos={form.images}
-                      onPhotosChange={(urls) => update('images', urls)}
-                    />
-                  </div>
+          {/* Title */}
+          <div>
+            <FieldLabel>Title</FieldLabel>
+            <Input
+              value={draft.title}
+              onChange={(e) => update({ title: e.target.value.slice(0, 140) })}
+              placeholder="What are you selling?"
+            />
+          </div>
 
-                  {/* Title */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <FieldLabel>Title</FieldLabel>
-                      <CharCounter value={form.title} max={100} />
-                    </div>
-                    <input
-                      type="text"
-                      value={form.title}
-                      onChange={(e) => update('title', e.target.value.slice(0, 100))}
-                      placeholder="What are you selling?"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={{
-                        ...inputStyle(),
-                        caretColor: 'var(--color-gold)',
-                      }}
-                    />
-                  </div>
+          {/* Price */}
+          <div>
+            <FieldLabel>Price (π)</FieldLabel>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={draft.priceInPi ? String(draft.priceInPi) : ''}
+              onChange={(e) => update({ priceInPi: Number(e.target.value) || 0 })}
+              placeholder="0.00"
+            />
+          </div>
 
-                  {/* Price */}
-                  <div>
-                    <FieldLabel>Price (Pi)</FieldLabel>
-                    <PiPriceInput
-                      value={form.price_in_pi}
-                      onChange={(val) => update('price_in_pi', val)}
-                    />
-                  </div>
+          {/* Description */}
+          <div>
+            <FieldLabel>Description</FieldLabel>
+            <Textarea
+              rows={5}
+              value={draft.description}
+              onChange={(e) =>
+                update({ description: e.target.value.slice(0, 5000) })
+              }
+              placeholder="Describe your item — condition, features, why you're selling…"
+            />
+          </div>
 
-                  {/* Category */}
-                  <div>
-                    <FieldLabel>Category</FieldLabel>
-                    <CategoryDropdown
-                      value={form.category}
-                      onChange={(val) => update('category', val)}
-                    />
-                  </div>
-
-                  {/* Condition */}
-                  <div>
-                    <FieldLabel>Condition</FieldLabel>
-                    <ConditionSelector
-                      value={form.condition}
-                      onChange={(val) => update('condition', val)}
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <FieldLabel>Description</FieldLabel>
-                      <CharCounter value={form.description} max={2000} />
-                    </div>
-                    <textarea
-                      value={form.description}
-                      onChange={(e) => update('description', e.target.value.slice(0, 2000))}
-                      placeholder="Describe your item — condition, features, why you're selling..."
-                      rows={5}
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none resize-none"
-                      style={{
-                        ...inputStyle(),
-                        caretColor: 'var(--color-gold)',
-                      }}
-                    />
-                    <div className="mt-2">
-                      <AISuggestButton
-                        title={form.title}
-                        category={form.category}
-                        condition={form.condition}
-                        onGenerated={(desc) => update('description', desc)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  <div>
-                    <FieldLabel>Location</FieldLabel>
-                    <LocationPicker
-                      city={form.location_city}
-                      country={form.location_country}
-                      onCityChange={(val) => update('location_city', val)}
-                      onCountryChange={(val) => update('location_country', val)}
-                    />
-                  </div>
-
-                  {/* Product Type */}
-                  <div>
-                    <FieldLabel>Product Type</FieldLabel>
-                    <div className="flex gap-2">
-                      {(
-                        [
-                          { key: 'physical' as ProductType, label: '📦 Physical', desc: 'Ships to buyer' },
-                          { key: 'digital' as ProductType, label: '💾 Digital', desc: 'Delivered online' },
-                        ] as const
-                      ).map((pt) => (
-                        <button
-                          key={pt.key}
-                          type="button"
-                          onClick={() => update('product_type', pt.key)}
-                          className="flex-1 py-3 px-3 rounded-xl text-center transition-all"
-                          style={{
-                            backgroundColor: form.product_type === pt.key ? 'rgba(240,192,64,0.15)' : 'var(--color-card-bg)',
-                            color: form.product_type === pt.key ? 'var(--color-gold)' : 'var(--color-text)',
-                            border: form.product_type === pt.key ? '1px solid rgba(240,192,64,0.4)' : '1px solid rgba(136,136,136,0.2)',
-                          }}
-                        >
-                          <p className="text-sm font-semibold">{pt.label}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--color-subtext)' }}>{pt.desc}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Shipping — shown for physical products only */}
-                  {form.product_type === 'physical' ? (
-                    <div>
-                      <FieldLabel>Shipping Options</FieldLabel>
-                      <ShippingSelector
-                        value={form.shipping}
-                        onChange={(cfg) => update('shipping', cfg)}
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <FieldLabel>Delivery Method</FieldLabel>
-                      <div
-                        className="py-3 px-4 rounded-xl text-sm"
-                        style={{
-                          backgroundColor: 'rgba(20,184,166,0.1)',
-                          color: '#14B8A6',
-                          border: '1px solid rgba(20,184,166,0.3)',
-                        }}
-                      >
-                        💾 Digital Delivery — files/links sent via PiBazaar
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Allow Offers */}
-                  <div className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: 'var(--color-card-bg)' }}>
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-                        Allow Offers
-                      </p>
-                      <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-                        Let buyers send you offers
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => update('allow_offers', !form.allow_offers)}
-                      className="relative w-12 h-6 rounded-full transition-colors"
-                      style={{
-                        backgroundColor: form.allow_offers ? 'var(--color-gold)' : 'rgba(136,136,136,0.3)',
-                      }}
-                      aria-label={`Allow offers: ${form.allow_offers ? 'on' : 'off'}`}
-                    >
-                      <span
-                        className="absolute top-0.5 w-5 h-5 rounded-full transition-transform"
-                        style={{
-                          backgroundColor: '#fff',
-                          transform: form.allow_offers ? 'translateX(26px)' : 'translateX(2px)',
-                        }}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Fast Seller Agreement */}
-                  <FastSellerAgreement
-                    checked={form.fast_seller_agreed}
-                    onChange={(val) => update('fast_seller_agreed', val)}
-                  />
-
-                  {/* Publish Button */}
-                  <button
-                    type="button"
-                    onClick={() => void handlePublish()}
-                    disabled={!canPublish}
-                    className="w-full py-4 rounded-xl text-base font-bold transition-opacity disabled:opacity-40"
-                    style={{
-                      backgroundColor: canPublish ? 'var(--color-gold)' : 'rgba(136,136,136,0.3)',
-                      color: canPublish ? '#000' : 'var(--color-subtext)',
-                    }}
-                  >
-                    {publishing ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <span
-                          className="inline-block w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-                          style={{ borderColor: '#000', borderTopColor: 'transparent' }}
-                        />
-                        Publishing...
-                      </span>
-                    ) : (
-                      'Publish Listing'
-                    )}
-                  </button>
-
-                  {!form.fast_seller_agreed && (
-                    <p className="text-xs text-center" style={{ color: 'var(--color-subtext)' }}>
-                      You must agree to the Fast Seller Agreement before publishing
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Right — Live Preview (desktop sticky, mobile collapsible) */}
-            <div className="mt-8 lg:mt-0">
-              {/* Mobile toggle */}
-              <button
-                type="button"
-                onClick={() => setPreviewCollapsed((p) => !p)}
-                className="lg:hidden w-full flex items-center justify-between py-3 px-4 rounded-xl mb-3"
-                style={{ backgroundColor: 'var(--color-card-bg)', color: 'var(--color-text)' }}
-              >
-                <span className="text-sm font-semibold" style={{ fontFamily: 'Sora, sans-serif' }}>
-                  Preview
-                </span>
-                <span className="text-xs" style={{ color: 'var(--color-gold)' }}>
-                  {previewCollapsed ? 'Show' : 'Hide'}
-                </span>
-              </button>
-
-              {!previewCollapsed && (
-                <div className="lg:sticky lg:top-6">
-                  <p
-                    className="hidden lg:block text-sm font-semibold mb-4"
-                    style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-                  >
-                    Live Preview
-                  </p>
-                  <div className="flex justify-center">
-                    <ListingPreviewCard
-                      form={form}
-                      sellerName={currentUser?.username ?? 'you'}
-                    />
-                  </div>
-                  <p className="text-xs text-center mt-3" style={{ color: 'var(--color-subtext)' }}>
-                    This is how your listing will appear in the browse feed
-                  </p>
-                </div>
-              )}
+          {/* Category */}
+          <div>
+            <FieldLabel>Category</FieldLabel>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((cat) => (
+                <Pill
+                  key={cat}
+                  active={draft.category === cat}
+                  onClick={() => update({ category: cat })}
+                >
+                  {cat}
+                </Pill>
+              ))}
             </div>
           </div>
-        </ErrorBoundary>
+
+          {/* Condition */}
+          <div>
+            <FieldLabel>Condition</FieldLabel>
+            <div className="flex flex-wrap gap-2">
+              {CONDITIONS.map((c) => (
+                <Pill
+                  key={c.key}
+                  active={draft.condition === c.key}
+                  onClick={() => update({ condition: c.key })}
+                >
+                  {c.label}
+                </Pill>
+              ))}
+            </div>
+          </div>
+
+          {/* Product type */}
+          <div>
+            <FieldLabel>Product type</FieldLabel>
+            <div className="grid grid-cols-3 gap-2">
+              {PRODUCT_TYPES.map((pt) => {
+                const active = draft.productType === pt.key
+                return (
+                  <button
+                    key={pt.key}
+                    type="button"
+                    onClick={() => update({ productType: pt.key })}
+                    className={`rounded-xl border p-3 text-center transition-colors ${
+                      active
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border bg-card hover:border-primary'
+                    }`}
+                  >
+                    <p
+                      className={`text-sm font-semibold ${active ? 'text-primary' : 'text-foreground'}`}
+                    >
+                      {pt.label}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {pt.desc}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <FieldLabel>City</FieldLabel>
+              <Input
+                value={draft.city}
+                onChange={(e) => update({ city: e.target.value })}
+                placeholder="City"
+              />
+            </div>
+            <div>
+              <FieldLabel>Country</FieldLabel>
+              <Input
+                value={draft.country}
+                onChange={(e) => update({ country: e.target.value })}
+                placeholder="Country"
+              />
+            </div>
+          </div>
+
+          {/* Allow offers */}
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-card p-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Allow offers</p>
+              <p className="text-xs text-muted-foreground">
+                Let buyers send you offers
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={draft.allowOffers}
+              onChange={(e) => update({ allowOffers: e.target.checked })}
+              className="h-5 w-5 accent-[var(--color-gold)]"
+            />
+          </label>
+
+          {/* Publish */}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={!canPublish}
+            loading={publishing}
+            onClick={() => void handlePublish()}
+          >
+            {publishing ? 'Publishing…' : 'Publish listing'}
+          </Button>
+        </div>
       </div>
     </main>
   )

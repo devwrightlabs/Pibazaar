@@ -1,13 +1,15 @@
 
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'wouter'
 import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Skeleton } from '@/components/ui/skeleton'
 import StarRating from '@/components/ui/StarRating'
 import TrustStatusBadge from '@/components/ui/TrustStatusBadge'
 import BuyerProtectionBadge from '@/components/ui/BuyerProtectionBadge'
-import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/components/providers/PiAuthProvider'
+import { useUpdateProfile } from '@/lib/api/hooks'
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
 
@@ -27,9 +29,12 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
   const themeMode = useUIStore((s) => s.themeMode)
   const setThemeMode = useUIStore((s) => s.setThemeMode)
   const piPriceUsd = useStore((s) => s.piPriceUsd)
+  const { logout, loginWithPi } = useAuth()
+  const updateProfile = useUpdateProfile()
 
   const [profileLoading, setProfileLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [linking, setLinking] = useState(false)
 
   /* ── Swipe-to-close state ──────────────────────────────────────────── */
   const touchStartX = useRef(0)
@@ -41,7 +46,7 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
   useEffect(() => {
     if (open) {
       setProfileLoading(true)
-      const timer = setTimeout(() => setProfileLoading(false), 600)
+      const timer = setTimeout(() => setProfileLoading(false), 400)
       return () => clearTimeout(timer)
     }
     return undefined
@@ -65,23 +70,27 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
     // Optimistic: apply immediately
     setThemeMode(next)
 
-    // Background save to Supabase
+    // Persist to the API when authenticated
     if (currentUser) {
       setSaving(true)
-      void (async () => {
-        try {
-          await supabase
-            .from('users')
-            .update({ theme_preference: next })
-            .eq('pi_uid', currentUser.pi_uid)
-        } catch {
-          // Silently fail — optimistic update already applied
-        } finally {
-          setSaving(false)
-        }
-      })()
+      updateProfile.mutate(
+        { themePreference: next },
+        { onSettled: () => setSaving(false) },
+      )
     }
-  }, [themeMode, setThemeMode, currentUser])
+  }, [themeMode, setThemeMode, currentUser, updateProfile])
+
+  /* ── Link Pi account ────────────────────────────────────────────────── */
+  const handleLinkPi = useCallback(async () => {
+    setLinking(true)
+    try {
+      await loginWithPi()
+    } catch {
+      /* error surfaced via authError */
+    } finally {
+      setLinking(false)
+    }
+  }, [loginWithPi])
 
   /* ── Touch handlers for swipe-to-close ─────────────────────────────── */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -189,24 +198,30 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
           ) : (
             <div className="flex items-center gap-3">
               <div
-                className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
+                className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
                 style={{ backgroundColor: 'var(--color-gold)' }}
               >
-                <span className="font-bold text-xl text-black">
-                  {initials}
-                </span>
+                {currentUser?.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.username}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="font-bold text-xl text-black">{initials}</span>
+                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-semibold text-base truncate" style={{ color: 'var(--color-text)' }}>
                   {currentUser?.username ?? 'Pioneer'}
                 </span>
                 <span className="text-xs truncate" style={{ color: 'var(--color-subtext)' }}>
-                  {currentUser?.pi_uid ? `UID: ${currentUser.pi_uid.slice(0, 12)}...` : 'Pi Network User'}
+                  {currentUser?.piUid ? `UID: ${currentUser.piUid.slice(0, 12)}...` : 'Pi Network User'}
                 </span>
                 {/* Trust score + KYC status */}
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <StarRating score={4.2} size={12} showScore />
-                  <TrustStatusBadge status="trusted" />
+                  <StarRating score={currentUser?.trustScore ?? 0} size={12} showScore />
+                  {currentUser?.isKycVerified && <TrustStatusBadge status="trusted" />}
                 </div>
               </div>
             </div>
@@ -297,8 +312,8 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
                   Member since
                 </p>
                 <p className="text-sm" style={{ color: 'var(--color-text)' }}>
-                  {currentUser?.created_at
-                    ? new Date(currentUser.created_at).toLocaleDateString('en-US', {
+                  {currentUser?.createdAt
+                    ? new Date(currentUser.createdAt).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -309,6 +324,55 @@ export default function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
               <BuyerProtectionBadge tier="standard" />
             </div>
           )}
+        </div>
+
+        {/* Divider */}
+        <div className="mx-5 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
+
+        {/* Account actions */}
+        <div className="px-5 py-4 flex flex-col gap-2">
+          <Link
+            href="/profile"
+            onClick={onClose}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors"
+            style={{ color: 'var(--color-text)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span className="text-sm font-medium">View Profile</span>
+          </Link>
+
+          {currentUser && !currentUser.piUid && (
+            <button
+              onClick={handleLinkPi}
+              disabled={linking}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors disabled:opacity-60"
+              style={{ color: 'var(--color-gold)' }}
+            >
+              <span className="text-base leading-none">π</span>
+              <span className="text-sm font-medium">
+                {linking ? 'Linking…' : 'Link Pi account'}
+              </span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              onClose()
+              logout()
+            }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors"
+            style={{ color: 'var(--color-error)' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span className="text-sm font-medium">Log out</span>
+          </button>
         </div>
 
         {/* Swipe hint (mobile) */}

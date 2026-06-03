@@ -2,3 +2,4 @@
 - [Express 5 route params](express5-route-params.md) — `req.params.x` is typed `string | string[]`; use the `param(req, name)` helper; literal routes (`/users/me`) must precede `/:id`.
 - [api-server stack](api-server-stack.md) — PiBazaar backend: Express + Drizzle + Replit Postgres, esbuild bundle (no typecheck at runtime), contract in artifacts/api-server/API_CONTRACT.md.
 - [TS project refs stale .d.ts](ts-project-references-stale-dts.md) — api-server reads lib/db's emitted .d.ts, not src; after schema edits rebuild with `tsc -b lib/db --force`, deleting tsbuildinfo isn't enough.
+- [PiBazaar web migration](pibazaar-migration.md) — web is fully off Supabase onto api-server typed client (JWT `pibazaar-token`, camelCase); build needs `PORT`+`BASE_PATH`; conversations use `unread`/`otherUser`; 2% fee paid by seller on release.

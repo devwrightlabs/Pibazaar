@@ -1,6 +1,6 @@
 
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MapContainer,
   TileLayer,
@@ -11,9 +11,10 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import type { Map as LeafletMap } from 'leaflet'
-import type { Listing } from '@/lib/types'
+import type { Listing } from '@/lib/api/types'
 import { useUIStore } from '@/store/useUIStore'
 import { useStore } from '@/store/useStore'
+import { useListings } from '@/lib/api/hooks'
 
 /* ─── Leaflet CSS injection (idempotent) ───────────────────────────────── */
 
@@ -59,6 +60,8 @@ interface MapBaseProps {
   radius?: number
   /** When provided, fixes the container height (e.g. "400px") */
   height?: string
+  /** Optional explicit listings; otherwise fetched via useListings */
+  listings?: Listing[]
 }
 
 /* ─── Persistent map events handler ────────────────────────────────────── */
@@ -84,14 +87,20 @@ function MapEventHandler() {
 
 /* ─── Component ────────────────────────────────────────────────────────── */
 
-export default function MapBase({ radius, height }: MapBaseProps) {
+export default function MapBase({ radius, height, listings: listingsProp }: MapBaseProps) {
   const mapCenter = useUIStore((s) => s.mapCenter)
   const mapZoom = useUIStore((s) => s.mapZoom)
   const hasHydrated = useUIStore((s) => s._hasHydrated)
   const themeMode = useUIStore((s) => s.themeMode)
-  const listings = useStore((s) => s.listings)
   const storeRadius = useStore((s) => s.mapRadius)
   const userLocation = useStore((s) => s.userLocation)
+
+  // Fetch active listings unless explicitly provided via props.
+  const { data } = useListings({ limit: 100 }, listingsProp === undefined)
+  const listings = useMemo<Listing[]>(
+    () => listingsProp ?? data?.listings ?? [],
+    [listingsProp, data],
+  )
 
   const mapRef = useRef<LeafletMap | null>(null)
   const [locating, setLocating] = useState(false)
@@ -132,9 +141,9 @@ export default function MapBase({ radius, height }: MapBaseProps) {
     }
 
     const inRange = listings.filter((listing) => {
-      if (listing.status !== 'active' || listing.deleted_at !== null) return false
-      if (typeof listing.location_lat !== 'number' || typeof listing.location_lng !== 'number') return false
-      return distanceKm(center[0], center[1], listing.location_lat, listing.location_lng) <= effectiveRadius
+      if (listing.status !== 'active') return false
+      if (typeof listing.locationLat !== 'number' || typeof listing.locationLng !== 'number') return false
+      return distanceKm(center[0], center[1], listing.locationLat, listing.locationLng) <= effectiveRadius
     })
     setVisibleListings(inRange)
   }, [effectiveRadius, listings, mapCenter, userLocation])
@@ -208,11 +217,11 @@ export default function MapBase({ radius, height }: MapBaseProps) {
 
         {/* Listing markers */}
         {visibleListings.map((listing) => {
-          if (listing.location_lat == null || listing.location_lng == null) return null
+          if (listing.locationLat == null || listing.locationLng == null) return null
           return (
             <Marker
               key={listing.id}
-              position={[listing.location_lat, listing.location_lng]}
+              position={[listing.locationLat, listing.locationLng]}
               icon={GOLD_ICON}
             />
           )

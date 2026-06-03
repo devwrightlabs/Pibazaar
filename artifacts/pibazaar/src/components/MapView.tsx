@@ -1,12 +1,12 @@
 
 
 import { useEffect, useRef, useState } from 'react'
-import type { Listing } from '@/lib/types'
+import type { Listing } from '@/lib/api/types'
 import ErrorBoundary from './ErrorBoundary'
 import MapFallback from './MapFallback'
 import RadiusSlider from './RadiusSlider'
 import LoadingSkeleton from './LoadingSkeleton'
-import { supabase } from '@/lib/supabase'
+import { useListings } from '@/lib/api/hooks'
 
 const DEFAULT_CENTER: [number, number] = [25.0343, -77.3963]
 const DEFAULT_ZOOM = 12
@@ -77,8 +77,8 @@ function MapViewInner({ center, zoom, listings, radius, onError }: MapViewInnerP
         })
 
         listings.forEach((listing) => {
-          if (!listing.location_lat || !listing.location_lng) return
-          const marker = L.marker([listing.location_lat, listing.location_lng], { icon: goldIcon })
+          if (listing.locationLat == null || listing.locationLng == null) return
+          const marker = L.marker([listing.locationLat, listing.locationLng], { icon: goldIcon })
           const popupContent = document.createElement('div')
           popupContent.style.cssText = 'min-width:180px;font-family:DM Sans,sans-serif;background:#16213E;padding:8px;border-radius:8px;'
           if (listing.images[0]) {
@@ -93,11 +93,11 @@ function MapViewInner({ center, zoom, listings, radius, onError }: MapViewInnerP
           title.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:3px;color:#fff;'
           popupContent.appendChild(title)
           const price = document.createElement('div')
-          price.textContent = `${listing.price_in_pi} Pi`
+          price.textContent = `${listing.priceInPi.toFixed(2)} π`
           price.style.cssText = 'color:#F0C040;font-weight:700;font-size:15px;'
           popupContent.appendChild(price)
           const location = document.createElement('div')
-          location.textContent = `${listing.city}, ${listing.country}`
+          location.textContent = [listing.city, listing.country].filter(Boolean).join(', ')
           location.style.cssText = 'color:#888;font-size:11px;margin-top:2px;'
           popupContent.appendChild(location)
           marker.bindPopup(popupContent, { maxWidth: 220 })
@@ -133,9 +133,10 @@ export default function MapView() {
   const [radius, setRadius] = useState(50)
   const [locationDenied, setLocationDenied] = useState(false)
   const [locationLoading, setLocationLoading] = useState(true)
-  const [listings, setListings] = useState<Listing[]>([])
-  const [listingsLoading, setListingsLoading] = useState(true)
   const [mapError, setMapError] = useState<string | null>(null)
+
+  const { data, isLoading: listingsLoading } = useListings({ limit: 100 })
+  const listings = (data?.listings ?? []).filter((l) => l.status === 'active')
 
   useEffect(() => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
@@ -155,26 +156,6 @@ export default function MapView() {
       },
       { timeout: 8000 }
     )
-  }, [])
-
-  useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('listings')
-          .select('*')
-          .eq('status', 'active')
-          .is('deleted_at', null)
-          .limit(100)
-        if (error) throw error
-        setListings((data as Listing[]) ?? [])
-      } catch (err) {
-        console.error('Failed to fetch listings for map:', err)
-      } finally {
-        setListingsLoading(false)
-      }
-    }
-    void fetchListings()
   }, [])
 
   const handleRetryLocation = () => {

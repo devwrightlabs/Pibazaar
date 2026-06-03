@@ -1,78 +1,17 @@
-
-
-import { useEffect, useState, useCallback } from 'react'
-
-// ─── Theme presets ────────────────────────────────────────────────────────────
-
-type ThemeName = 'dark' | 'light' | 'sepia' | 'custom'
-
-interface ThemeValues {
-  bg: string
-  accent: string
-  card: string
-  text: string
-  subtext: string
-}
-
-const THEME_PRESETS: Record<Exclude<ThemeName, 'custom'>, ThemeValues> = {
-  dark:  { bg: '#0A0A0F', accent: '#F0C040', card: '#16213E', text: '#FFFFFF', subtext: '#888888' },
-  light: { bg: '#F5F5F5', accent: '#D4A017', card: '#FFFFFF', text: '#111111', subtext: '#555555' },
-  sepia: { bg: '#F4ECD8', accent: '#8B6914', card: '#EDE0C4', text: '#3B2A1A', subtext: '#7A6045' },
-}
-
-function applyTheme(values: ThemeValues) {
-  if (typeof document === 'undefined') return
-  const root = document.documentElement
-  root.style.setProperty('--color-background', values.bg)
-  root.style.setProperty('--color-gold', values.accent)
-  root.style.setProperty('--color-card-bg', values.card)
-  root.style.setProperty('--color-text', values.text)
-  root.style.setProperty('--color-subtext', values.subtext)
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Settings {
-  preferred_currency: string
-  email_notifications: boolean
-  theme: ThemeName
-  custom_bg: string | null
-  custom_accent: string | null
-  custom_card_bg: string | null
-  custom_text: string | null
-  custom_subtext: string | null
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  preferred_currency: 'USD',
-  email_notifications: true,
-  theme: 'dark',
-  custom_bg: null,
-  custom_accent: null,
-  custom_card_bg: null,
-  custom_text: null,
-  custom_subtext: null,
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('pibazaar-token')
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
+import { useEffect, useState } from 'react'
+import { useAuth } from '@/components/providers/PiAuthProvider'
+import { useUIStore } from '@/store/useUIStore'
+import { useUpdateProfile } from '@/lib/api/hooks'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { ApiError } from '@/lib/api/client'
+import type { ThemePreference, JurisdictionMode } from '@/lib/api/types'
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-2xl p-5 space-y-4"
-      style={{ backgroundColor: 'var(--color-card-bg)' }}
-    >
-      <h2
-        className="text-base font-bold"
-        style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-      >
+    <div className="rounded-2xl p-5 space-y-4" style={{ backgroundColor: 'var(--color-card-bg)' }}>
+      <h2 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>
         {title}
       </h2>
       {children}
@@ -80,501 +19,310 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-        {label}
-      </span>
-      <button
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className="relative w-12 h-6 rounded-full transition-colors"
-        style={{ backgroundColor: checked ? 'var(--color-gold)' : 'rgba(136,136,136,0.3)' }}
-      >
-        <span
-          className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
-          style={{ transform: checked ? 'translateX(24px)' : 'translateX(0)' }}
-        />
-      </button>
-    </div>
-  )
-}
-
-function ColorPickerRow({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm" style={{ color: 'var(--color-text)' }}>
-        {label}
-      </span>
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-mono" style={{ color: 'var(--color-subtext)' }}>
-          {value}
-        </span>
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-8 h-8 rounded cursor-pointer border-0 p-0"
-          style={{ backgroundColor: 'transparent' }}
-        />
-      </div>
-    </div>
-  )
+function fieldStyle(): React.CSSProperties {
+  return {
+    backgroundColor: 'var(--color-secondary-bg)',
+    color: 'var(--color-text)',
+    border: '1px solid var(--color-border-token)',
+  }
 }
 
 function DeleteModal({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl p-6 space-y-4"
-        style={{ backgroundColor: 'var(--color-card-bg)' }}
-      >
-        <h3
-          className="font-bold text-lg"
-          style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-        >
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}>
+      <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ backgroundColor: 'var(--color-card-bg)' }}>
+        <h3 className="font-bold text-lg" style={{ color: 'var(--color-text)' }}>
           Delete Account
         </h3>
         <p className="text-sm" style={{ color: 'var(--color-subtext)' }}>
           Contact support to delete your account. Please reach out to{' '}
-          <span style={{ color: 'var(--color-gold)' }}>support@pibazaar.app</span>{' '}
-          and we will process your request within 7 business days.
+          <span style={{ color: 'var(--color-gold)' }}>support@pibazaar.app</span> and we will process your request within 7 business days.
         </p>
-        <button
-          onClick={onClose}
-          className="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
-          style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
-        >
+        <Button variant="default" onClick={onClose} className="w-full">
           Got it
-        </button>
+        </Button>
       </div>
     </div>
   )
 }
-
-// ─── Preview Card ─────────────────────────────────────────────────────────────
-
-function PreviewCard({ values }: { values: ThemeValues }) {
-  return (
-    <div
-      className="rounded-xl p-4 space-y-2 mt-4"
-      style={{ backgroundColor: values.bg, border: `1px solid ${values.accent}40` }}
-    >
-      <p className="text-xs font-semibold" style={{ color: values.subtext }}>
-        Preview
-      </p>
-      <div
-        className="rounded-lg p-3 space-y-1"
-        style={{ backgroundColor: values.card }}
-      >
-        <p
-          className="text-sm font-bold"
-          style={{ fontFamily: 'Sora, sans-serif', color: values.text }}
-        >
-          Sample Listing
-        </p>
-        <p className="text-xs" style={{ color: values.subtext }}>
-          A great product on PiBazaar
-        </p>
-        <span
-          className="inline-block text-xs font-bold px-2 py-0.5 rounded-full mt-1"
-          style={{ backgroundColor: values.accent, color: values.bg }}
-        >
-          3.14 π
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
-  const [customColors, setCustomColors] = useState<ThemeValues>({
-    bg: '#0A0A0F',
-    accent: '#F0C040',
-    card: '#16213E',
-    text: '#FFFFFF',
-    subtext: '#888888',
-  })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { user, isAuthenticated, isLoading, refresh } = useAuth()
+  const themeMode = useUIStore((s) => s.themeMode)
+  const setThemeMode = useUIStore((s) => s.setThemeMode)
+  const jurisdictionMode = useUIStore((s) => s.jurisdictionMode)
+  const setJurisdictionMode = useUIStore((s) => s.setJurisdictionMode)
+  const updateProfile = useUpdateProfile()
+
+  const [email, setEmail] = useState('')
+  const [walletAddress, setWalletAddress] = useState('')
+  const [theme, setTheme] = useState<ThemePreference>('dark')
+  const [jurisdiction, setJurisdiction] = useState<JurisdictionMode>('global')
   const [toast, setToast] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // ─── Derived preview values ─────────────────────────────────────────────
-
-  const previewValues: ThemeValues =
-    settings.theme === 'custom'
-      ? customColors
-      : THEME_PRESETS[settings.theme as Exclude<ThemeName, 'custom'>] ?? THEME_PRESETS.dark
-
-  // ─── Apply theme whenever selection changes ─────────────────────────────
-
+  // Seed local form state from the authenticated user / UI store.
   useEffect(() => {
-    applyTheme(previewValues)
-  }, [previewValues])
-
-  // ─── Load settings on mount ─────────────────────────────────────────────
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = getToken()
-        const res = await fetch('/api/users/settings', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (!res.ok) throw new Error('Failed')
-        const { settings: s } = (await res.json()) as { settings: Settings }
-
-        setSettings(s)
-
-        // Seed custom color pickers from saved custom values (fall back to dark preset)
-        setCustomColors({
-          bg:      s.custom_bg      ?? THEME_PRESETS.dark.bg,
-          accent:  s.custom_accent  ?? THEME_PRESETS.dark.accent,
-          card:    s.custom_card_bg ?? THEME_PRESETS.dark.card,
-          text:    s.custom_text    ?? THEME_PRESETS.dark.text,
-          subtext: s.custom_subtext ?? THEME_PRESETS.dark.subtext,
-        })
-
-        // Apply the saved theme
-        if (s.theme === 'custom') {
-          applyTheme({
-            bg:      s.custom_bg      ?? THEME_PRESETS.dark.bg,
-            accent:  s.custom_accent  ?? THEME_PRESETS.dark.accent,
-            card:    s.custom_card_bg ?? THEME_PRESETS.dark.card,
-            text:    s.custom_text    ?? THEME_PRESETS.dark.text,
-            subtext: s.custom_subtext ?? THEME_PRESETS.dark.subtext,
-          })
-        } else {
-          applyTheme(THEME_PRESETS[s.theme as Exclude<ThemeName, 'custom'>] ?? THEME_PRESETS.dark)
-        }
-      } catch {
-        // silently keep defaults
-      } finally {
-        setLoading(false)
-      }
+    if (user) {
+      setEmail(user.email ?? '')
+      setWalletAddress(user.walletAddress ?? '')
+      setTheme(user.themePreference)
+      setJurisdiction(user.jurisdictionMode)
     }
-    void load()
-  }, [])
+  }, [user])
 
-  // ─── Save handler ───────────────────────────────────────────────────────
+  const handleThemeChange = (next: ThemePreference) => {
+    setTheme(next)
+    setThemeMode(next)
+  }
 
-  const handleSave = useCallback(async () => {
-    setSaving(true)
-    try {
-      const token = getToken()
-      const payload: Record<string, unknown> = {
-        preferred_currency: settings.preferred_currency,
-        email_notifications: settings.email_notifications,
-        theme: settings.theme,
-      }
-      if (settings.theme === 'custom') {
-        payload.custom_bg      = customColors.bg
-        payload.custom_accent  = customColors.accent
-        payload.custom_card_bg = customColors.card
-        payload.custom_text    = customColors.text
-        payload.custom_subtext = customColors.subtext
-      }
+  const handleJurisdictionChange = (next: JurisdictionMode) => {
+    setJurisdiction(next)
+    setJurisdictionMode(next)
+  }
 
-      const res = await fetch('/api/users/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const handleSave = () => {
+    setError(null)
+    updateProfile.mutate(
+      {
+        email: email.trim() || undefined,
+        walletAddress: walletAddress.trim() || undefined,
+        themePreference: theme,
+        jurisdictionMode: jurisdiction,
+      },
+      {
+        onSuccess: () => {
+          void refresh()
+          setToast(true)
+          setTimeout(() => setToast(false), 2000)
         },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error('Save failed')
-      setToast(true)
-      setTimeout(() => setToast(false), 2000)
-    } catch {
-      // Could show an error toast here
-    } finally {
-      setSaving(false)
-    }
-  }, [settings, customColors])
+        onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not save settings. Please try again.'),
+      },
+    )
+  }
 
-  // ─── CSV export ─────────────────────────────────────────────────────────
-
-  const handleExport = useCallback(async () => {
-    try {
-      const token = getToken()
-      const res = await fetch('/api/users/export', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error('Export failed')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'pibazaar-export.csv'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      // silent
-    }
-  }, [])
-
-  // ─── Theme button helper ────────────────────────────────────────────────
-
-  const themeButtons: { key: ThemeName; label: string; emoji: string }[] = [
-    { key: 'dark',   label: 'Dark',   emoji: '🌙' },
-    { key: 'light',  label: 'Light',  emoji: '☀️' },
-    { key: 'sepia',  label: 'Sepia',  emoji: '📜' },
-    { key: 'custom', label: 'Custom', emoji: '🎨' },
-  ]
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: 'var(--color-bg)' }}
-      >
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: 'var(--color-gold)', borderTopColor: 'transparent' }} />
+      <main className="min-h-screen pb-32" style={{ backgroundColor: 'var(--color-bg)' }}>
+        <div className="px-4 pt-6 max-w-2xl mx-auto space-y-5">
+          <Skeleton className="h-8 w-1/3" />
+          <Skeleton shape="card" />
+          <Skeleton shape="card" />
+        </div>
+      </main>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: 'var(--color-bg)' }}>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia>🔒</EmptyMedia>
+            <EmptyTitle>Sign in required</EmptyTitle>
+            <EmptyDescription>Log in to manage your settings.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </main>
     )
   }
 
   return (
-    <main
-      className="min-h-screen pb-32"
-      style={{ backgroundColor: 'var(--color-bg)' }}
-    >
-      <div className="px-4 pt-6 max-w-2xl mx-auto space-y-5">
+    <SettingsInner
+      email={email}
+      setEmail={setEmail}
+      walletAddress={walletAddress}
+      setWalletAddress={setWalletAddress}
+      theme={theme}
+      onThemeChange={handleThemeChange}
+      jurisdiction={jurisdiction}
+      onJurisdictionChange={handleJurisdictionChange}
+      themeMode={themeMode}
+      onSave={handleSave}
+      saving={updateProfile.isPending}
+      toast={toast}
+      error={error}
+    />
+  )
+}
 
+interface InnerProps {
+  email: string
+  setEmail: (v: string) => void
+  walletAddress: string
+  setWalletAddress: (v: string) => void
+  theme: ThemePreference
+  onThemeChange: (t: ThemePreference) => void
+  jurisdiction: JurisdictionMode
+  onJurisdictionChange: (j: JurisdictionMode) => void
+  themeMode: string
+  onSave: () => void
+  saving: boolean
+  toast: boolean
+  error: string | null
+}
+
+function SettingsInner(props: InnerProps) {
+  const {
+    email,
+    setEmail,
+    walletAddress,
+    setWalletAddress,
+    theme,
+    onThemeChange,
+    jurisdiction,
+    onJurisdictionChange,
+    onSave,
+    saving,
+    toast,
+    error,
+  } = props
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+
+  const themeOptions: { key: ThemePreference; label: string; emoji: string }[] = [
+    { key: 'dark', label: 'Dark', emoji: '🌙' },
+    { key: 'light', label: 'Light', emoji: '☀️' },
+  ]
+  const jurisdictionOptions: { key: JurisdictionMode; label: string; desc: string }[] = [
+    { key: 'local', label: 'Local', desc: 'Prioritise nearby listings' },
+    { key: 'global', label: 'Global', desc: 'Show listings everywhere' },
+  ]
+
+  return (
+    <main className="min-h-screen pb-32" style={{ backgroundColor: 'var(--color-bg)' }}>
+      <div className="px-4 pt-6 max-w-2xl mx-auto space-y-5">
         {/* Header */}
         <div className="mb-2">
-          <h1
-            className="text-2xl font-bold"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
             Settings
           </h1>
           <p className="text-sm mt-1" style={{ color: 'var(--color-subtext)' }}>
-            Manage your preferences
+            Manage your account and preferences
           </p>
         </div>
 
-        {/* ── Section 1: Notifications ─────────────────────────────── */}
-        <SectionCard title="🔔 Notifications">
-          <Toggle
-            label="Email Notifications"
-            checked={settings.email_notifications}
-            onChange={(v) => setSettings((s) => ({ ...s, email_notifications: v }))}
-          />
-        </SectionCard>
-
-        {/* ── Section 2: Currency ──────────────────────────────────── */}
-        <SectionCard title="💱 Currency">
-          <div>
-            <label
-              className="text-xs font-semibold block mb-1"
-              style={{ color: 'var(--color-subtext)' }}
-            >
-              Preferred Currency
-            </label>
-            <input
-              type="text"
-              maxLength={5}
-              placeholder="USD"
-              value={settings.preferred_currency}
-              onChange={(e) =>
-                setSettings((s) => ({
-                  ...s,
-                  preferred_currency: e.target.value.toUpperCase(),
-                }))
-              }
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none uppercase font-mono"
-              style={{
-                backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                border: '1px solid rgba(136,136,136,0.3)',
-              }}
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--color-subtext)' }}>
-              3-letter code: USD, EUR, GBP, etc.
-            </p>
+        {/* Account */}
+        <SectionCard title="👤 Account">
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-subtext)' }}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                placeholder="you@example.com"
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                style={fieldStyle()}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-subtext)' }}>
+                Pi Wallet Address
+              </label>
+              <input
+                type="text"
+                value={walletAddress}
+                placeholder="G..."
+                onChange={(e) => setWalletAddress(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono"
+                style={fieldStyle()}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--color-subtext)' }}>
+                Payouts from completed sales are sent here.
+              </p>
+            </div>
           </div>
         </SectionCard>
 
-        {/* ── Section 3: Theme ─────────────────────────────────────── */}
-        <SectionCard title="🎨 Theme">
-          {/* 2×2 grid of preset buttons */}
+        {/* Appearance */}
+        <SectionCard title="🎨 Appearance">
           <div className="grid grid-cols-2 gap-3">
-            {themeButtons.map(({ key, label, emoji }) => {
-              const isActive = settings.theme === key
-              const swatch = key !== 'custom' ? THEME_PRESETS[key] : null
+            {themeOptions.map(({ key, label, emoji }) => {
+              const active = theme === key
               return (
                 <button
                   key={key}
-                  onClick={() => setSettings((s) => ({ ...s, theme: key }))}
-                  className="rounded-xl p-4 text-left transition-all active:scale-95"
+                  onClick={() => onThemeChange(key)}
+                  className="rounded-xl p-4 text-left transition-all"
                   style={{
-                    backgroundColor: swatch ? swatch.card : 'var(--color-card-bg)',
-                    border: `2px solid ${isActive ? 'var(--color-gold)' : 'transparent'}`,
-                    outline: 'none',
+                    backgroundColor: 'var(--color-secondary-bg)',
+                    border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
                   }}
                 >
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2">
                     <span>{emoji}</span>
-                    <span
-                      className="text-sm font-bold"
-                      style={{
-                        fontFamily: 'Sora, sans-serif',
-                        color: swatch ? swatch.text : 'var(--color-text)',
-                      }}
-                    >
+                    <span className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
                       {label}
                     </span>
                   </div>
-                  {swatch && (
-                    <div className="flex gap-1 mt-2">
-                      <span
-                        className="w-4 h-4 rounded-full border border-white/10"
-                        style={{ backgroundColor: swatch.bg }}
-                      />
-                      <span
-                        className="w-4 h-4 rounded-full border border-white/10"
-                        style={{ backgroundColor: swatch.accent }}
-                      />
-                      <span
-                        className="w-4 h-4 rounded-full border border-white/10"
-                        style={{ backgroundColor: swatch.text }}
-                      />
-                    </div>
-                  )}
-                  {key === 'custom' && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--color-subtext)' }}>
-                      Pick your own colors
-                    </p>
-                  )}
                 </button>
               )
             })}
           </div>
-
-          {/* Custom color pickers — shown only when Custom is active */}
-          {settings.theme === 'custom' && (
-            <div
-              className="mt-4 rounded-xl p-4 space-y-3"
-              style={{
-                backgroundColor: 'var(--color-bg)',
-                border: '1px solid rgba(136,136,136,0.2)',
-              }}
-            >
-              <p
-                className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: 'var(--color-subtext)' }}
-              >
-                Custom Colors
-              </p>
-              <ColorPickerRow
-                label="Background"
-                value={customColors.bg}
-                onChange={(v) => setCustomColors((c) => ({ ...c, bg: v }))}
-              />
-              <ColorPickerRow
-                label="Accent"
-                value={customColors.accent}
-                onChange={(v) => setCustomColors((c) => ({ ...c, accent: v }))}
-              />
-              <ColorPickerRow
-                label="Card Background"
-                value={customColors.card}
-                onChange={(v) => setCustomColors((c) => ({ ...c, card: v }))}
-              />
-              <ColorPickerRow
-                label="Text"
-                value={customColors.text}
-                onChange={(v) => setCustomColors((c) => ({ ...c, text: v }))}
-              />
-              <ColorPickerRow
-                label="Subtext"
-                value={customColors.subtext}
-                onChange={(v) => setCustomColors((c) => ({ ...c, subtext: v }))}
-              />
-            </div>
-          )}
-
-          {/* Live preview card */}
-          <PreviewCard values={previewValues} />
         </SectionCard>
 
-        {/* ── Section 4: Account ───────────────────────────────────── */}
-        <SectionCard title="👤 Account">
-          <div className="space-y-3">
-            <button
-              onClick={handleExport}
-              className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{
-                backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                border: '1px solid rgba(136,136,136,0.3)',
-              }}
-            >
-              📥 Export My Data (CSV)
-            </button>
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#EF4444' }}
-            >
-              🗑️ Delete Account
-            </button>
+        {/* Marketplace */}
+        <SectionCard title="🌍 Marketplace">
+          <div className="grid grid-cols-2 gap-3">
+            {jurisdictionOptions.map(({ key, label, desc }) => {
+              const active = jurisdiction === key
+              return (
+                <button
+                  key={key}
+                  onClick={() => onJurisdictionChange(key)}
+                  className="rounded-xl p-4 text-left transition-all"
+                  style={{
+                    backgroundColor: 'var(--color-secondary-bg)',
+                    border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
+                  }}
+                >
+                  <span className="text-sm font-bold block" style={{ color: 'var(--color-text)' }}>
+                    {label}
+                  </span>
+                  <span className="text-xs mt-1 block" style={{ color: 'var(--color-subtext)' }}>
+                    {desc}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </SectionCard>
 
-        {/* ── Save button ──────────────────────────────────────────── */}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-4 rounded-2xl font-bold text-base transition-all active:scale-[0.98] disabled:opacity-60"
-          style={{
-            backgroundColor: 'var(--color-gold)',
-            color: '#000',
-            fontFamily: 'Sora, sans-serif',
-          }}
-        >
+        {/* Danger zone */}
+        <SectionCard title="⚠️ Account Actions">
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="w-full py-3 rounded-xl text-sm font-semibold transition-all"
+            style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--color-error)' }}
+          >
+            🗑️ Delete Account
+          </button>
+        </SectionCard>
+
+        {error && (
+          <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid var(--color-error)' }}>
+            <p className="text-sm" style={{ color: 'var(--color-error)' }}>
+              {error}
+            </p>
+          </div>
+        )}
+
+        <Button variant="default" size="lg" loading={saving} onClick={onSave} className="w-full">
           {saving ? 'Saving…' : 'Save Settings'}
-        </button>
+        </Button>
       </div>
 
-      {/* ── Success toast ─────────────────────────────────────────── */}
       {toast && (
         <div
-          className="fixed bottom-28 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl font-semibold text-sm shadow-xl z-50 transition-all"
+          className="fixed bottom-28 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl font-semibold text-sm shadow-xl z-50"
           style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
         >
           ✓ Settings saved!
         </div>
       )}
 
-      {/* ── Delete modal ─────────────────────────────────────────── */}
       {showDeleteModal && <DeleteModal onClose={() => setShowDeleteModal(false)} />}
     </main>
   )

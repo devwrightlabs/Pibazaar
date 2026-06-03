@@ -1,7 +1,7 @@
 
 
 import { useState, useRef, useCallback, useId } from 'react'
-import { supabase } from '@/lib/supabase'
+import { uploadFile } from '@/lib/api/client'
 
 const MAX_PHOTOS = 10
 const MAX_SIZE_MB = 1
@@ -17,7 +17,7 @@ interface PhotoItem {
 }
 
 interface Props {
-  photos: string[] // public URLs
+  photos: string[] // object storage paths
   onPhotosChange: (urls: string[]) => void
 }
 
@@ -96,31 +96,21 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
   const dragItem = useRef<number | null>(null)
   const dragOverItem = useRef<number | null>(null)
 
-  const uploadFile = useCallback(
+  const uploadOne = useCallback(
     async (file: File, itemId: string) => {
       try {
         const compressed = await compressImage(file)
-        const ext = 'jpg'
-      const path = `listings/${Date.now()}-${crypto.randomUUID()}.${ext}`
 
         setItems((prev) =>
           prev.map((p) => (p.id === itemId ? { ...p, progress: 50 } : p))
         )
 
-        const { error } = await supabase.storage
-          .from('listing-images')
-          .upload(path, compressed, { contentType: 'image/jpeg', upsert: false })
-
-        if (error) throw error
-
-        const { data: urlData } = supabase.storage
-          .from('listing-images')
-          .getPublicUrl(path)
-        const publicUrl = urlData.publicUrl
+        // Request a signed URL, PUT the file, and store the returned objectPath.
+        const objectPath = await uploadFile(compressed, file.name)
 
         setItems((prev) => {
           const updated = prev.map((p) =>
-            p.id === itemId ? { ...p, publicUrl, uploading: false, progress: 100 } : p
+            p.id === itemId ? { ...p, publicUrl: objectPath, uploading: false, progress: 100 } : p
           )
           onPhotosChange(updated.map((p) => p.publicUrl).filter(Boolean) as string[])
           return updated
@@ -158,13 +148,13 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
       const runNext = () => {
         if (index >= toAdd.length) return
         const i = index++
-        void uploadFile(toAdd[i], newItems[i].id).finally(runNext)
+        void uploadOne(toAdd[i], newItems[i].id).finally(runNext)
       }
       for (let i = 0; i < Math.min(CONCURRENCY, toAdd.length); i++) {
         runNext()
       }
     },
-    [items.length, uploadFile]
+    [items.length, uploadOne]
   )
 
   const handleFiles = (fileList: FileList | null) => {

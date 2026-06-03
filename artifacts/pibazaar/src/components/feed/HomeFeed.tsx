@@ -283,7 +283,7 @@ function FeedContent({ initialListings = [] }: HomeFeedProps) {
     // Price range
     const pMin = filters.priceMin ? Number(filters.priceMin) : 0
     const pMax = filters.priceMax ? Number(filters.priceMax) : Infinity
-    if (l.price_in_pi < pMin || l.price_in_pi > pMax) {
+    if (l.priceInPi < pMin || l.priceInPi > pMax) {
       return false
     }
     return true

@@ -30,6 +30,7 @@ import OrderDetailPage from "@/app/orders/[orderId]/page";
 import ProductDetailPage from "@/app/products/[id]/page";
 import ProfilePage from "@/app/profile/page";
 import SettingsPage from "@/app/settings/page";
+import ShippingPage from "@/app/shipping/page";
 import EscrowPage from "@/app/transactions/escrow/[transactionId]/page";
 import NotFound from "@/app/not-found";
 
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/products/:id" component={ProductDetailPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/shipping" component={ShippingPage} />
         <Route path="/transactions/escrow/:transactionId" component={EscrowPage} />
         <Route component={NotFound} />
       </Switch>

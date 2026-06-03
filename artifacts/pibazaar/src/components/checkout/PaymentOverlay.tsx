@@ -1,24 +1,22 @@
-
-
 import { useEffect, useState } from 'react'
-import { createPiPayment, approvePaymentOnServer, completePaymentOnServer } from '@/lib/pi-sdk'
-import { useStore } from '@/store/useStore'
+import { createPiPayment } from '@/lib/pi-sdk'
+import { escrowApi, ApiError } from '@/lib/api/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type PaymentStage = 'idle' | 'creating' | 'approving' | 'completing' | 'success' | 'error'
 
 interface PaymentOverlayProps {
-  /** Amount in Pi to charge. */
+  /** Amount in Pi to charge — should equal escrow.amountPi. */
   amount: number
   /** Short description shown to the user (e.g. "PiBazaar: Widget X"). */
   memo: string
-  /** Arbitrary metadata forwarded to the Pi SDK. */
-  metadata: Record<string, unknown>
+  /** Arbitrary metadata forwarded to the Pi SDK (escrowId is merged in). */
+  metadata?: Record<string, unknown>
   /** Escrow ID created before initiating the payment. */
   escrowId: string
-  /** Called when the payment is fully verified and the escrow is held. */
-  onSuccess?: (paymentId: string, txid: string, escrowId: string) => void
+  /** Called when the payment is fully verified and the escrow is funded. */
+  onSuccess?: (paymentId: string, txid: string) => void
   /** Called when the user cancels the payment. */
   onCancel?: () => void
   /** Called when a non-recoverable error occurs. */
@@ -50,6 +48,12 @@ const STAGE_MESSAGES: Record<Exclude<PaymentStage, 'idle' | 'error'>, string> = 
   success: 'Payment confirmed!',
 }
 
+function errMsg(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PaymentOverlay({
@@ -63,7 +67,6 @@ export default function PaymentOverlay({
   onError,
   open,
 }: PaymentOverlayProps) {
-  const { openModal } = useStore()
   const [stage, setStage] = useState<PaymentStage>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -92,68 +95,46 @@ export default function PaymentOverlay({
     setStage('creating')
     setErrorMessage(null)
 
-    try {
-      createPiPayment(
-        { amount, memo, metadata },
-        {
-          onReadyForServerApproval: (paymentId) => {
-            setStage('approving')
-            void approvePaymentOnServer(paymentId, escrowId)
-              .then((result) => {
-                if (!result.success) {
-                  setStage('error')
-                  const msg = result.error ?? 'Server could not approve the payment.'
-                  setErrorMessage(msg)
-                  onError?.(msg)
-                }
-              })
-              .catch((err: unknown) => {
-                setStage('error')
-                const msg = err instanceof Error ? err.message : 'Approval request failed.'
-                setErrorMessage(msg)
-                onError?.(msg)
-              })
-          },
-          onReadyForServerCompletion: (paymentId, txid) => {
-            setStage('completing')
-            void completePaymentOnServer(paymentId, txid, escrowId)
-              .then((result) => {
-                if (result.success) {
-                  setStage('success')
-                  onSuccess?.(paymentId, txid, result.escrow_id ?? escrowId)
-                } else {
-                  setStage('error')
-                  const msg = result.error ?? 'Payment verification failed.'
-                  setErrorMessage(msg)
-                  onError?.(msg)
-                }
-              })
-              .catch((err: unknown) => {
-                setStage('error')
-                const msg = err instanceof Error ? err.message : 'Completion request failed.'
-                setErrorMessage(msg)
-                onError?.(msg)
-              })
-          },
-          onCancel: () => {
-            setStage('idle')
-            onCancel?.()
-            onClose()
-          },
-          onError: (error) => {
+    createPiPayment(
+      { amount, memo, metadata: { ...(metadata ?? {}), escrowId } },
+      {
+        onReadyForServerApproval: (paymentId) => {
+          setStage('approving')
+          void escrowApi.approve(escrowId, paymentId).catch((err: unknown) => {
             setStage('error')
-            const msg = error.message || 'An unexpected payment error occurred.'
+            const msg = errMsg(err, 'Server could not approve the payment.')
             setErrorMessage(msg)
             onError?.(msg)
-          },
+          })
         },
-      )
-    } catch (err) {
-      setStage('error')
-      const msg = err instanceof Error ? err.message : 'Failed to initiate payment.'
-      setErrorMessage(msg)
-      onError?.(msg)
-    }
+        onReadyForServerCompletion: (paymentId, txid) => {
+          setStage('completing')
+          void escrowApi
+            .complete(escrowId, paymentId, txid)
+            .then(() => {
+              setStage('success')
+              onSuccess?.(paymentId, txid)
+            })
+            .catch((err: unknown) => {
+              setStage('error')
+              const msg = errMsg(err, 'Payment verification failed.')
+              setErrorMessage(msg)
+              onError?.(msg)
+            })
+        },
+        onCancel: () => {
+          setStage('idle')
+          onCancel?.()
+          onClose()
+        },
+        onError: (error) => {
+          setStage('error')
+          const msg = error.message || 'An unexpected payment error occurred.'
+          setErrorMessage(msg)
+          onError?.(msg)
+        },
+      },
+    )
   }
 
   if (!open) return null
@@ -174,10 +155,7 @@ export default function PaymentOverlay({
       >
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3
-            className="text-lg font-semibold"
-            style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-          >
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
             Confirm Payment
           </h3>
           {!isProcessing && (
@@ -194,7 +172,7 @@ export default function PaymentOverlay({
 
         {/* Amount display */}
         <div className="text-center py-2">
-          <p className="text-3xl font-bold" style={{ color: 'var(--color-gold)', fontFamily: 'Sora, sans-serif' }}>
+          <p className="text-3xl font-bold" style={{ color: 'var(--color-gold)' }}>
             {amount.toFixed(2)} π
           </p>
           <p className="text-sm mt-1" style={{ color: 'var(--color-subtext)' }}>
@@ -250,7 +228,6 @@ export default function PaymentOverlay({
               style={{
                 backgroundColor: 'var(--color-gold)',
                 color: '#000',
-                fontFamily: 'Sora, sans-serif',
                 minHeight: '44px',
                 padding: '12px 16px',
               }}
@@ -266,7 +243,6 @@ export default function PaymentOverlay({
               style={{
                 backgroundColor: 'var(--color-gold)',
                 color: '#000',
-                fontFamily: 'Sora, sans-serif',
                 minHeight: '44px',
                 padding: '12px 16px',
               }}

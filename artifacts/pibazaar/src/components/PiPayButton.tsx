@@ -1,30 +1,37 @@
-
-
 import { useState } from 'react'
-import { createPiPayment, approvePaymentOnServer, completePaymentOnServer } from '@/lib/pi-sdk'
+import { createPiPayment } from '@/lib/pi-sdk'
+import { escrowApi, ApiError } from '@/lib/api/client'
 import { useStore } from '@/store/useStore'
 
 interface PiPayButtonProps {
+  /** Escrow record this payment funds. Bound into approve/complete + metadata. */
+  escrowId: string
+  /** Amount in Pi to charge — should equal escrow.amountPi. */
   amount: number
+  /** Short memo shown in the Pi wallet. */
   memo: string
-  metadata: Record<string, unknown>
-  escrowId?: string
-  onPaymentId?: (paymentId: string) => void
+  /** Extra metadata forwarded to the Pi SDK (escrowId is merged in). */
+  metadata?: Record<string, unknown>
+  /** Fired after the payment completes and the escrow is funded. */
   onComplete?: (paymentId: string, txid: string) => void
+  /** Fired when the user cancels the payment. */
   onCancel?: (paymentId: string) => void
-  onEscrowHeld?: (escrowId: string) => void
   disabled?: boolean
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
 export default function PiPayButton({
+  escrowId,
   amount,
   memo,
   metadata,
-  escrowId,
-  onPaymentId,
   onComplete,
   onCancel,
-  onEscrowHeld,
   disabled = false,
 }: PiPayButtonProps) {
   const [processing, setProcessing] = useState(false)
@@ -35,51 +42,35 @@ export default function PiPayButton({
     setProcessing(true)
 
     createPiPayment(
-      { amount, memo, metadata },
+      { amount, memo, metadata: { ...(metadata ?? {}), escrowId } },
       {
         onReadyForServerApproval: (paymentId) => {
-          onPaymentId?.(paymentId)
-
-          // If we have an escrow ID, approve the payment server-side.
-          // The server links the paymentId to the escrow record and
-          // developer-approves the payment with the Pi Network API.
-          if (escrowId) {
-            void approvePaymentOnServer(paymentId, escrowId).then((result) => {
-              if (!result.success) {
-                console.error('[PiPayButton] Server approval failed:', result.error)
-                openModal({
-                  title: 'Approval Error',
-                  message: result.error ?? 'Server could not approve the payment. Please try again or contact support.',
-                  variant: 'alert',
-                })
-              }
+          // Bind the Pi paymentId to the escrow and developer-approve server-side.
+          void escrowApi.approve(escrowId, paymentId).catch((err: unknown) => {
+            setProcessing(false)
+            openModal({
+              title: 'Approval Error',
+              message: errorMessage(err, 'The server could not approve this payment. Please try again.'),
+              variant: 'alert',
             })
-          }
+          })
         },
         onReadyForServerCompletion: (paymentId, txid) => {
-          // Complete the payment server-side via /api/pi/verify.
-          // This transitions the escrow to 'held_in_escrow'.
-          if (escrowId) {
-            void completePaymentOnServer(paymentId, txid, escrowId).then((result) => {
+          // Complete the payment + transition the escrow to funded.
+          void escrowApi
+            .complete(escrowId, paymentId, txid)
+            .then(() => {
               setProcessing(false)
-              if (result.success) {
-                onComplete?.(paymentId, txid)
-                if (result.escrow_id) {
-                  onEscrowHeld?.(result.escrow_id)
-                }
-              } else {
-                openModal({
-                  title: 'Verification Failed',
-                  message: result.error ?? 'Payment completed but server verification failed. Please contact support.',
-                  variant: 'alert',
-                })
-              }
+              onComplete?.(paymentId, txid)
             })
-          } else {
-            // Fallback: no escrow ID — pass through to parent callback.
-            setProcessing(false)
-            onComplete?.(paymentId, txid)
-          }
+            .catch((err: unknown) => {
+              setProcessing(false)
+              openModal({
+                title: 'Verification Failed',
+                message: errorMessage(err, 'Payment completed but verification failed. Please contact support.'),
+                variant: 'alert',
+              })
+            })
         },
         onCancel: (paymentId) => {
           setProcessing(false)
@@ -93,7 +84,7 @@ export default function PiPayButton({
             variant: 'alert',
           })
         },
-      }
+      },
     )
   }
 
@@ -103,7 +94,7 @@ export default function PiPayButton({
       disabled={processing || disabled}
       className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-opacity"
       style={{
-        backgroundColor: '#F0C040',
+        backgroundColor: 'var(--color-gold)',
         color: '#000',
         fontFamily: 'Sora, sans-serif',
         opacity: processing || disabled ? 0.7 : 1,
@@ -111,15 +102,11 @@ export default function PiPayButton({
     >
       {processing ? (
         <>
-          <span
-            className="inline-block w-5 h-5 rounded-full border-2 border-black border-t-transparent animate-spin"
-          />
+          <span className="inline-block w-5 h-5 rounded-full border-2 border-black border-t-transparent animate-spin" />
           Processing…
         </>
       ) : (
-        <>
-          Pay {amount.toFixed(2)} π
-        </>
+        <>Pay {amount.toFixed(2)} π</>
       )}
     </button>
   )

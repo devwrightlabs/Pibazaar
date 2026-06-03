@@ -1,187 +1,192 @@
 
 
-import { useEffect, useState, Suspense, useCallback } from 'react'
-import { useLocation, useSearch } from 'wouter'
-import { supabase, isSupabaseConfigured } from '@/lib/supabase'
-import type { Listing } from '@/lib/types'
-import LoadingSkeleton from '@/components/LoadingSkeleton'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearch, useLocation } from 'wouter'
+
+import { useListings } from '@/lib/api/hooks'
+import type { ListingQuery, ListingCondition } from '@/lib/api/types'
+import ProductCard from '@/components/marketplace/ProductCard'
+import ProductCardSkeleton from '@/components/marketplace/ProductCardSkeleton'
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
+import { Button } from '@/components/ui/button'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import PullToRefresh from '@/components/marketplace/PullToRefresh'
 
-const CATEGORIES = ['All', 'Electronics', 'Clothing', 'Home', 'Garden', 'Outdoor', 'Sports', 'Books', 'Art']
+const CATEGORIES = [
+  'All',
+  'Electronics',
+  'Fashion',
+  'Home',
+  'Vehicles',
+  'Sports',
+  'Books',
+  'Art',
+  'Other',
+]
 
-function extractErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  if (typeof err === 'object' && err !== null && 'message' in err) {
-    return String((err as { message: unknown }).message)
-  }
-  return 'Failed to load listings. Please try again.'
-}
+const CONDITIONS: { label: string; value: '' | ListingCondition }[] = [
+  { label: 'Any', value: '' },
+  { label: 'New', value: 'new' },
+  { label: 'Like New', value: 'like_new' },
+  { label: 'Good', value: 'good' },
+  { label: 'Fair', value: 'fair' },
+]
+
+const SORTS: { label: string; value: NonNullable<ListingQuery['sort']> }[] = [
+  { label: 'Most recent', value: 'recent' },
+  { label: 'Price: low to high', value: 'price_asc' },
+  { label: 'Price: high to low', value: 'price_desc' },
+]
+
+const SKELETON_COUNT = 8
 
 function BrowseContent() {
-  const searchString = useSearch(); const searchParams = new URLSearchParams(searchString)
-  
-  const categoryParam = searchParams.get('category') ?? ''
-  const seasonParam = searchParams.get('season') ?? ''
+  const searchString = useSearch()
+  const [, navigate] = useLocation()
 
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedCategory, setSelectedCategory] = useState(categoryParam || 'All')
-  const [searchQuery, setSearchQuery] = useState('')
+  const initialParams = useMemo(
+    () => new URLSearchParams(searchString),
+    [searchString],
+  )
 
-  const fetchListings = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const [searchInput, setSearchInput] = useState(initialParams.get('q') ?? '')
+  const [debouncedQuery, setDebouncedQuery] = useState(searchInput)
+  const [category, setCategory] = useState(initialParams.get('category') ?? 'All')
+  const [condition, setCondition] = useState<'' | ListingCondition>('')
+  const [sort, setSort] = useState<NonNullable<ListingQuery['sort']>>('recent')
 
-    if (!isSupabaseConfigured) {
-      setError(
-        'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment.'
-      )
-      setLoading(false)
-      return
-    }
-
-    try {
-      let query = supabase
-        .from('listings')
-        .select('*')
-        .eq('status', 'active')
-        .is('deleted_at', null)
-        .order('is_boosted', { ascending: false })
-        .order('created_at', { ascending: false })
-
-      if (selectedCategory !== 'All') {
-        query = query.ilike('category', `%${selectedCategory}%`)
-      }
-      if (seasonParam) {
-        query = query.ilike('category', `%${seasonParam}%`)
-      }
-      if (searchQuery) {
-        query = query.ilike('title', `%${searchQuery}%`)
-      }
-
-      const { data, error: fetchError } = await query.limit(50)
-      if (fetchError) throw fetchError
-      setListings((data as Listing[]) ?? [])
-    } catch (err) {
-      console.error('Failed to fetch listings:', err)
-      setError(extractErrorMessage(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [selectedCategory, searchQuery, seasonParam])
-
+  // Debounce the search box (~350ms).
   useEffect(() => {
-    void fetchListings()
-  }, [fetchListings])
+    const t = setTimeout(() => setDebouncedQuery(searchInput), 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // Keep the URL query string in sync with q/category.
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (debouncedQuery) params.set('q', debouncedQuery)
+    if (category !== 'All') params.set('category', category)
+    const qs = params.toString()
+    navigate(`/browse${qs ? `?${qs}` : ''}`, { replace: true })
+  }, [debouncedQuery, category, navigate])
+
+  const query: ListingQuery = {
+    q: debouncedQuery || undefined,
+    category: category === 'All' ? undefined : category,
+    condition: condition || undefined,
+    sort,
+    limit: 50,
+    offset: 0,
+  }
+
+  const { data, isLoading, isError, error, refetch } = useListings(query)
+  const listings = data?.listings ?? []
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <PullToRefresh onRefresh={fetchListings}>
-        <div className="px-4 pt-6 pb-4">
-        <h1
-          className="text-2xl font-bold mb-4"
-          style={{ fontFamily: 'Sora, sans-serif', color: 'var(--color-text)' }}
-        >
+    <main className="min-h-screen bg-background pb-24">
+      <div className="px-4 pt-6 max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold font-heading text-foreground mb-4">
           Browse
-          {seasonParam && (
-            <span className="text-base font-normal ml-2" style={{ color: 'var(--color-gold)' }}>
-              — {seasonParam} deals
-            </span>
-          )}
         </h1>
 
+        {/* Search */}
         <input
           type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search listings..."
-          className="w-full px-4 py-3 rounded-xl text-sm outline-none mb-4"
-          style={{
-            backgroundColor: 'var(--color-card-bg)',
-            color: 'var(--color-text)',
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search listings…"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none mb-4 bg-card text-foreground border border-border focus:border-primary"
         />
 
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className="px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-colors"
-              style={{
-                backgroundColor: selectedCategory === cat ? 'var(--color-gold)' : 'var(--color-card-bg)',
-                color: selectedCategory === cat ? '#000' : 'var(--color-text)',
-              }}
-            >
-              {cat}
-            </button>
-          ))}
-          <div className="flex-shrink-0 w-4" aria-hidden="true" />
+        {/* Category pills */}
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
+          {CATEGORIES.map((cat) => {
+            const isActive = category === cat
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-colors ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-card text-foreground border border-border'
+                }`}
+              >
+                {cat}
+              </button>
+            )
+          })}
+          <div className="flex-shrink-0 w-2" aria-hidden="true" />
         </div>
 
-        {loading ? (
-          <LoadingSkeleton rows={6} variant="grid" />
-        ) : error ? (
-          <div className="text-center py-16">
-            
-            <p className="font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-              Something went wrong
-            </p>
-            <p className="text-sm mb-4" style={{ color: 'var(--color-subtext)' }}>
-              {error}
-            </p>
-            <button
-              onClick={() => void fetchListings()}
-              className="px-6 py-3 rounded-xl font-semibold text-sm"
-              style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
-            >
-              Try Again
-            </button>
+        {/* Condition pills + sort */}
+        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {CONDITIONS.map((c) => {
+              const isActive = condition === c.value
+              return (
+                <button
+                  key={c.label}
+                  onClick={() => setCondition(c.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-colors ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-muted-foreground border border-border'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              )
+            })}
           </div>
+
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as NonNullable<ListingQuery['sort']>)}
+            className="px-3 py-2 rounded-xl text-sm bg-card text-foreground border border-border outline-none"
+            aria-label="Sort listings"
+          >
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Results */}
+        {isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : isError ? (
+          <Empty className="border border-border">
+            <EmptyHeader>
+              <EmptyTitle>Something went wrong</EmptyTitle>
+              <EmptyDescription>
+                {error instanceof Error ? error.message : 'Failed to load listings.'}
+              </EmptyDescription>
+            </EmptyHeader>
+            <Button onClick={() => refetch()}>Try Again</Button>
+          </Empty>
         ) : listings.length === 0 ? (
-          <div className="text-center py-16">
-            
-            <p style={{ color: 'var(--color-subtext)' }}>No listings found</p>
-          </div>
+          <Empty className="border border-border">
+            <EmptyHeader>
+              <EmptyTitle>No listings found</EmptyTitle>
+              <EmptyDescription>
+                Try a different category, condition, or search term.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {listings.map((listing) => (
-              <div
-                key={listing.id}
-                className="rounded-xl overflow-hidden"
-                style={{ backgroundColor: 'var(--color-card-bg)' }}
-              >
-                <div className="h-40 bg-gray-800 relative">
-                  {listing.images[0] ? (
-                    <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gray-800"></div>
-                  )}
-                </div>
-                <div className="p-3">
-                  <h3 className="font-semibold text-sm truncate" style={{ color: 'var(--color-text)' }}>
-                    {listing.title}
-                  </h3>
-                  <p className="font-bold mt-1" style={{ color: 'var(--color-gold)' }}>
-                    {listing.price_in_pi} Pi
-                  </p>
-                  <button
-                    onClick={() => window.location.assign(`/checkout/${listing.id}`)}
-                    className="mt-2 w-full py-1.5 rounded-lg text-xs font-semibold"
-                    style={{ backgroundColor: '#F0C040', color: '#000' }}
-                  >
-                    Buy Now
-                  </button>
-                </div>
-              </div>
+              <ProductCard key={listing.id} item={listing} layout="grid" />
             ))}
           </div>
         )}
-        </div>
-      </PullToRefresh>
+      </div>
     </main>
   )
 }
@@ -189,9 +194,7 @@ function BrowseContent() {
 export default function BrowsePage() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSkeleton rows={6} variant="grid" />}>
-        <BrowseContent />
-      </Suspense>
+      <BrowseContent />
     </ErrorBoundary>
   )
 }

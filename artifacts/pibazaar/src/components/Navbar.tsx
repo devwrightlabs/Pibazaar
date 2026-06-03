@@ -1,23 +1,26 @@
 
 
+import { useState } from 'react'
 import { Link } from 'wouter'
 import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/components/providers/PiAuthProvider'
 import NotificationBell from '@/components/NotificationBell'
+import ProfileDrawer from '@/components/ProfileDrawer'
 
 export default function Navbar() {
   const { currentUser, isAuthenticated } = useStore()
   const jurisdictionMode = useUIStore((s) => s.jurisdictionMode)
   const setJurisdictionMode = useUIStore((s) => s.setJurisdictionMode)
   const { isLoading } = useAuth()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-secondary-bg/60 backdrop-blur-lg">
       <div className="flex items-center justify-between px-4 py-3">
-        {/* Logo — links to profile dashboard */}
-        <Link href="/profile" className="flex items-center gap-2" aria-label="Go to profile">
+        {/* Logo — links home */}
+        <Link href="/" className="flex items-center gap-2" aria-label="Go home">
           <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center">
             <span className="font-bold text-black text-sm">π</span>
           </div>
@@ -51,16 +54,28 @@ export default function Navbar() {
           {isLoading ? (
             <Skeleton shape="line" className="h-9 w-28 rounded-xl" />
           ) : isAuthenticated && currentUser ? (
-            <Link href="/profile" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center">
-                <span className="font-bold text-black text-xs">
-                  {(currentUser.username ?? 'P').charAt(0).toUpperCase()}
-                </span>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-2"
+              aria-label="Open profile menu"
+            >
+              <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center overflow-hidden">
+                {currentUser.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.username}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="font-bold text-black text-xs">
+                    {(currentUser.username ?? 'P').charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
               <span className="text-sm font-medium text-text-primary hidden sm:inline">
                 {currentUser.username}
               </span>
-            </Link>
+            </button>
           ) : (
             <Link
               href="/login"
@@ -73,6 +88,8 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      <ProfileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </header>
   )
 }

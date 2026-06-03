@@ -6,8 +6,8 @@ import { useStore } from '@/store/useStore'
 import { useUIStore } from '@/store/useUIStore'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { authenticateWithPi } from '@/lib/pi-sdk'
-import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/components/providers/PiAuthProvider'
+import { useUpdateProfile } from '@/lib/api/hooks'
 
 /* ─── Props ────────────────────────────────────────────────────────────── */
 
@@ -49,11 +49,14 @@ const DASHBOARD_LINKS: SidebarLink[] = [
     ),
   },
   {
-    href: '/profile',
-    label: 'Reviews',
+    href: '/dashboard',
+    label: 'Dashboard',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="4" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="11" width="7" height="10" rx="1" />
       </svg>
     ),
   },
@@ -62,7 +65,17 @@ const DASHBOARD_LINKS: SidebarLink[] = [
 const SETTINGS_LINKS: SidebarLink[] = [
   {
     href: '/profile',
-    label: 'Privacy & Settings',
+    label: 'Profile',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+  },
+  {
+    href: '/settings',
+    label: 'Settings',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
@@ -75,15 +88,15 @@ const SETTINGS_LINKS: SidebarLink[] = [
 /* ─── Component ────────────────────────────────────────────────────────── */
 
 export default function MainSidebar({ open, onClose }: MainSidebarProps) {
-  const { currentUser, isAuthenticated, setCurrentUser } = useStore()
+  const { currentUser, isAuthenticated } = useStore()
   const themeMode = useUIStore((s) => s.themeMode)
   const setThemeMode = useUIStore((s) => s.setThemeMode)
   const piPriceUsd = useStore((s) => s.piPriceUsd)
+  const { loginWithPi, logout, authError } = useAuth()
+  const updateProfile = useUpdateProfile()
 
   const [profileLoading, setProfileLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
-  const [connectError, setConnectError] = useState<string | null>(null)
-  const [filterText, setFilterText] = useState('')
   const [saving, setSaving] = useState(false)
 
   /* ── Swipe-to-close state ──────────────────────────────────────────── */
@@ -96,7 +109,7 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
   useEffect(() => {
     if (open) {
       setProfileLoading(true)
-      const timer = setTimeout(() => setProfileLoading(false), 600)
+      const timer = setTimeout(() => setProfileLoading(false), 400)
       return () => clearTimeout(timer)
     }
     return undefined
@@ -121,69 +134,24 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
 
     if (currentUser) {
       setSaving(true)
-      void (async () => {
-        try {
-          await supabase
-            .from('users')
-            .update({ theme_preference: next })
-            .eq('pi_uid', currentUser.pi_uid)
-        } catch {
-          // Silently fail — optimistic update already applied
-        } finally {
-          setSaving(false)
-        }
-      })()
+      updateProfile.mutate(
+        { themePreference: next },
+        { onSettled: () => setSaving(false) },
+      )
     }
-  }, [themeMode, setThemeMode, currentUser])
+  }, [themeMode, setThemeMode, currentUser, updateProfile])
 
-  /* ── Pi Wallet connect ─────────────────────────────────────────────── */
-  const handleConnect = async () => {
+  /* ── Log in with Pi (provider handles SDK + JWT) ────────────────────── */
+  const handleConnect = useCallback(async () => {
     setConnecting(true)
-    setConnectError(null)
     try {
-      const piAuth = await authenticateWithPi()
-      if (!piAuth) {
-        setConnectError('Pi Browser is required to connect.')
-        setConnecting(false)
-        return
-      }
-
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: piAuth.accessToken }),
-      })
-
-      if (!res.ok) {
-        setConnectError('Verification failed. Please try again.')
-        setConnecting(false)
-        return
-      }
-
-      const data = (await res.json()) as {
-        token: string
-        user: { pi_uid: string; username: string | null; avatar_url: string | null }
-      }
-
-      setCurrentUser({
-        id: data.user.pi_uid,
-        pi_uid: data.user.pi_uid,
-        username: data.user.username ?? 'Pioneer',
-        avatar_url: data.user.avatar_url ?? null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pibazaar-token', data.token)
-      }
-      setConnecting(false)
-    } catch (err) {
-      console.error('Wallet connection failed:', err)
-      setConnectError('Connection failed. Please try again.')
+      await loginWithPi()
+    } catch {
+      /* error surfaced via authError */
+    } finally {
       setConnecting(false)
     }
-  }
+  }, [loginWithPi])
 
   /* ── Touch handlers for swipe-to-close (swipe left closes) ─────────── */
   const onTouchStart = useCallback((e: React.TouchEvent) => {
@@ -291,7 +259,7 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
                 </svg>
               </div>
               <p className="text-base font-bold" style={{ color: 'var(--color-text)' }}>
-                Connect Pi Wallet to unlock Dashboard
+                Log in to unlock your Dashboard
               </p>
               <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
                 Access orders, messages, reviews, and the full seller map.
@@ -302,10 +270,18 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
                 disabled={connecting}
                 className="w-full"
               >
-                {connecting ? 'Connecting…' : 'Connect Pi Wallet'}
+                {connecting ? 'Connecting…' : 'Log in with Pi'}
               </Button>
-              {connectError && (
-                <p className="text-xs" style={{ color: 'var(--color-error)' }}>{connectError}</p>
+              <Link
+                href="/login"
+                onClick={onClose}
+                className="text-xs font-medium"
+                style={{ color: 'var(--color-gold)' }}
+              >
+                Use username &amp; password instead
+              </Link>
+              {authError && (
+                <p className="text-xs" style={{ color: 'var(--color-error)' }}>{authError}</p>
               )}
             </div>
           )}
@@ -322,22 +298,30 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <Link href="/profile" onClick={onClose} className="flex items-center gap-3">
                   <div
-                    className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
+                    className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
                     style={{ backgroundColor: 'var(--color-gold)' }}
                   >
-                    <span className="font-bold text-xl text-black">{initials}</span>
+                    {currentUser?.avatarUrl ? (
+                      <img
+                        src={currentUser.avatarUrl}
+                        alt={currentUser.username}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="font-bold text-xl text-black">{initials}</span>
+                    )}
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="font-semibold text-base truncate" style={{ color: 'var(--color-text)' }}>
                       {currentUser?.username ?? 'Pioneer'}
                     </span>
                     <span className="text-xs truncate" style={{ color: 'var(--color-subtext)' }}>
-                      {currentUser?.pi_uid ? `UID: ${currentUser.pi_uid.slice(0, 12)}…` : 'Pi Network User'}
+                      {currentUser?.piUid ? `UID: ${currentUser.piUid.slice(0, 12)}…` : 'Pi Network User'}
                     </span>
                   </div>
-                </div>
+                </Link>
               )}
             </>
           )}
@@ -346,25 +330,6 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
         {/* ── Authenticated-only sections ─────────────────────────────── */}
         {isAuthenticated && (
           <>
-            {/* Divider */}
-            <div className="mx-5 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
-
-            {/* Search filter */}
-            <div className="px-5 py-3">
-              <input
-                type="text"
-                placeholder="Search listings…"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-colors"
-                style={{
-                  backgroundColor: 'var(--color-control-bg)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}
-              />
-            </div>
-
             {/* Divider */}
             <div className="mx-5 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
 
@@ -450,6 +415,46 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
                   Saving preferences…
                 </p>
               )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-5 h-px" style={{ backgroundColor: 'var(--color-border)' }} />
+
+            {/* Link Pi account (when not yet linked) */}
+            {currentUser && !currentUser.piUid && (
+              <div className="px-5 py-3">
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="w-full"
+                >
+                  {connecting ? 'Linking…' : 'Link Pi account'}
+                </Button>
+                {authError && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--color-error)' }}>{authError}</p>
+                )}
+              </div>
+            )}
+
+            {/* Logout */}
+            <div className="px-5 py-3">
+              <button
+                onClick={() => {
+                  onClose()
+                  logout()
+                }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors w-full"
+                style={{ color: 'var(--color-error)' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <path d="M16 17l5-5-5-5" />
+                  <path d="M21 12H9" />
+                </svg>
+                <span className="text-sm font-medium">Log out</span>
+              </button>
             </div>
           </>
         )}

@@ -1,49 +1,83 @@
-
-
 /**
- * AuthProvider (formerly PiAuthProvider)
+ * AuthProvider
  *
- * Restores Pi-authenticated sessions from localStorage and exposes shared
- * auth helpers for Pi Browser sign-in and logout flows.
+ * Centralizes authentication for the PiBazaar web app against the self-contained
+ * Express backend (`/api/auth/*`). Implements the two-step model:
+ *   1. Manual Sign Up / Log In (username + password) → issues our JWT.
+ *   2. Optional "Log In with Pi" using the Pi SDK → /auth/pi (login or link).
  *
- * On mount, this provider attempts to restore an existing session from
- * localStorage and hydrates the Zustand store. It also exposes a `logout()`
- * helper consumed by the Navbar and profile pages.
+ * The JWT is the single source of truth, persisted via the API client's token
+ * helpers. On mount we restore the session from GET /auth/me.
  */
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
 import { useLocation } from 'wouter'
-import { getSupabaseClient, setSupabaseAuth } from '@/lib/supabaseClient'
+import { useQueryClient } from '@tanstack/react-query'
+import { authApi, setToken, getToken, ApiError } from '@/lib/api/client'
+import { useRealtimeSync } from '@/lib/api/hooks'
 import { initPiSdk } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
+import type {
+  SelfUser,
+  SignupBody,
+  LoginBody,
+} from '@/lib/api/types'
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+const PI_BROWSER_REQUIRED_MESSAGE =
+  'Please open PiBazaar inside the Pi Browser to log in with Pi.'
 
 interface AuthContextValue {
-  loginWithPi: () => Promise<void>
-  logout: () => void
+  user: SelfUser | null
+  isAuthenticated: boolean
   isLoading: boolean
   authError: string | null
+  clearError: () => void
+  signup: (body: SignupBody) => Promise<SelfUser>
+  login: (body: LoginBody) => Promise<SelfUser>
+  loginWithPi: () => Promise<{ user: SelfUser; isNewUser: boolean }>
+  logout: () => void
+  refresh: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  loginWithPi: async () => {},
-  logout: () => {},
+  user: null,
+  isAuthenticated: false,
   isLoading: true,
   authError: null,
+  clearError: () => {},
+  signup: async () => {
+    throw new Error('Auth provider not mounted')
+  },
+  login: async () => {
+    throw new Error('Auth provider not mounted')
+  },
+  loginWithPi: async () => {
+    throw new Error('Auth provider not mounted')
+  },
+  logout: () => {},
+  refresh: async () => {},
 })
 
-/** @deprecated Use useAuth() */
-export function usePiAuth(): AuthContextValue & { handleLogin: () => Promise<void>; loading: boolean; error: string | null } {
+export function useAuth() {
+  return useContext(AuthContext)
+}
+
+/** @deprecated Use useAuth(). Kept for the login page during migration. */
+export function usePiAuth() {
   const ctx = useContext(AuthContext)
   return {
     ...ctx,
     handleLogin: async () => {
-      console.warn('[PiBazaar] usePiAuth() is deprecated. Use useAuth().loginWithPi().')
       try {
         await ctx.loginWithPi()
       } catch {
-        // The provider already stores the surfaced auth error.
+        /* error surfaced via authError */
       }
     },
     loading: ctx.isLoading,
@@ -51,240 +85,157 @@ export function usePiAuth(): AuthContextValue & { handleLogin: () => Promise<voi
   }
 }
 
-export function useAuth() {
-  return useContext(AuthContext)
-}
-
-// ─── Token payload shape (same as authHelper.AuthPayload) ─────────────────────
-
-interface TokenPayload {
-  sub: string
-  pi_uid: string
-  username?: string
-  exp: number
-}
-
-interface EdgeAuthUser {
-  pi_uid: string
-  pi_id: string
-  username?: string | null
-  avatar_url?: string | null
-}
-
-interface EdgeAuthResponse {
-  token?: string
-  user?: EdgeAuthUser
-  error?: string
-}
-
 interface PiAuthResultLite {
   accessToken: string
-  user: { uid: string; username: string }
+  user: { uid: string; username: string; wallet_address?: string }
 }
 
-const PI_BROWSER_REQUIRED_MESSAGE = 'Please open Pi Bazaar inside the Pi Browser to sign in.'
-
-/** Decode a JWT payload without signature verification (browser-safe). */
-function decodeJwtPayload(token: string): TokenPayload | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    // Pad base64url to standard base64
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
-    const json = atob(padded)
-    return JSON.parse(json) as TokenPayload
-  } catch {
-    return null
-  }
+function messageFromError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) return err.message
+  return fallback
 }
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export default function PiAuthProvider({ children }: { children: React.ReactNode }) {
-  const { setCurrentUser } = useStore()
+  const { currentUser, setCurrentUser } = useStore()
   const [, navigate] = useLocation()
+  const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
 
-  // On mount: restore session from localStorage if token is still valid
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      setIsLoading(false)
+  // Keep React Query caches live over the WebSocket while authenticated.
+  useRealtimeSync()
+
+  const clearError = useCallback(() => setAuthError(null), [])
+
+  const refresh = useCallback(async () => {
+    if (!getToken()) {
+      setCurrentUser(null)
       return
     }
-
-    const token = localStorage.getItem('pibazaar-token')
-
-    if (!token) {
-      setIsLoading(false)
-      return
-    }
-
     try {
-      // Decode without verifying — signature verification happens server-side.
-      // We only need the claims to hydrate the client store.
-      const decoded = decodeJwtPayload(token)
-
-      if (!decoded || !decoded.pi_uid || decoded.exp * 1000 < Date.now()) {
-        // Token missing or expired — clear it
-        localStorage.removeItem('pibazaar-token')
-        document.cookie = 'pibazaar-token=; path=/; max-age=0'
-        setIsLoading(false)
-        return
+      const { user } = await authApi.me()
+      setCurrentUser(user)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setToken(null)
+        setCurrentUser(null)
       }
-
-      setCurrentUser({
-        id: decoded.pi_uid,
-        pi_uid: decoded.pi_uid,
-        username: decoded.username ?? 'Pioneer',
-        avatar_url: null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
-    } catch {
-      localStorage.removeItem('pibazaar-token')
-    } finally {
-      setIsLoading(false)
     }
   }, [setCurrentUser])
 
-  const finalizeSession = useCallback(
-    (token: string, user: EdgeAuthUser) => {
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('pibazaar-token', token)
-          const secureFlag = window.location.protocol === 'https:' ? '; Secure' : ''
-          document.cookie = `pibazaar-token=${token}; path=/; max-age=3600; SameSite=Lax${secureFlag}`
-        } catch (storageErr) {
-          console.warn('[PiAuthProvider] Token persistence failed:', storageErr)
-        }
-      }
+  // Restore session on mount.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      await refresh()
+      if (active) setIsLoading(false)
+    })()
+    return () => {
+      active = false
+    }
+  }, [refresh])
 
+  const signup = useCallback(
+    async (body: SignupBody) => {
+      setAuthError(null)
       try {
-        setSupabaseAuth(token)
-      } catch (supaErr) {
-        console.warn('[PiAuthProvider] setSupabaseAuth failed:', supaErr)
+        const { token, user } = await authApi.signup(body)
+        setToken(token)
+        queryClient.clear()
+        setCurrentUser(user)
+        return user
+      } catch (err) {
+        const message = messageFromError(err, 'Sign up failed. Please try again.')
+        setAuthError(message)
+        throw err
       }
-
-      setCurrentUser({
-        id: user.pi_uid,
-        pi_uid: user.pi_uid,
-        username: user.username ?? user.pi_id ?? 'Pioneer',
-        avatar_url: user.avatar_url ?? null,
-        bio: null,
-        created_at: new Date().toISOString(),
-      })
     },
-    [setCurrentUser]
+    [setCurrentUser, queryClient],
   )
 
-  const invokeEdge = useCallback(
-    async (piAuth: PiAuthResultLite): Promise<{ ok: true; data: EdgeAuthResponse } | { ok: false; message: string }> => {
+  const login = useCallback(
+    async (body: LoginBody) => {
+      setAuthError(null)
       try {
-        const supabase = getSupabaseClient()
-        const { data, error: invokeError } = await supabase.functions.invoke<EdgeAuthResponse>('pi-auth', {
-          body: {
-            accessToken: piAuth.accessToken,
-            pi_uid: piAuth.user.uid,
-            pi_username: piAuth.user.username,
-          },
-        })
-
-        if (invokeError) {
-          const ctxResp = (invokeError as { context?: { response?: Response } }).context?.response
-          let serverMessage: string | null = null
-          if (ctxResp) {
-            try {
-              const parsed = (await ctxResp.clone().json()) as { error?: string }
-              serverMessage = parsed?.error ?? null
-            } catch {
-              try {
-                serverMessage = await ctxResp.clone().text()
-              } catch {
-                serverMessage = null
-              }
-            }
-          }
-          return {
-            ok: false,
-            message: serverMessage || invokeError.message || 'Authentication service unavailable.',
-          }
-        }
-
-        if (!data) {
-          return { ok: false, message: 'Empty response from authentication service.' }
-        }
-
-        return { ok: true, data }
+        const { token, user } = await authApi.login(body)
+        setToken(token)
+        queryClient.clear()
+        setCurrentUser(user)
+        return user
       } catch (err) {
-        console.error('[PiAuthProvider] Edge invocation threw:', err)
-        return {
-          ok: false,
-          message: err instanceof Error ? err.message : 'Network error contacting authentication service.',
-        }
+        const message = messageFromError(err, 'Incorrect username or password.')
+        setAuthError(message)
+        throw err
       }
     },
-    []
+    [setCurrentUser, queryClient],
   )
 
   const loginWithPi = useCallback(async () => {
-    setIsLoading(true)
     setAuthError(null)
+    if (typeof window === 'undefined' || !initPiSdk() || !window.Pi) {
+      const message = PI_BROWSER_REQUIRED_MESSAGE
+      setAuthError(message)
+      throw new Error(message)
+    }
+
+    let piAuth: PiAuthResultLite
+    try {
+      piAuth = (await window.Pi.authenticate(
+        ['username', 'payments', 'wallet_address'],
+        () => {},
+      )) as PiAuthResultLite
+      if (!piAuth?.accessToken) throw new Error('Pi authentication was cancelled.')
+    } catch (err) {
+      const message = messageFromError(err, 'Pi authentication was cancelled or failed.')
+      setAuthError(message)
+      throw new Error(message)
+    }
 
     try {
-      if (typeof window === 'undefined') {
-        throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
-      }
-
-      const ready = initPiSdk()
-      if (!ready || !window.Pi) {
-        throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
-      }
-
-      let piAuth: PiAuthResultLite
-      try {
-        const result = (await window.Pi.authenticate(['username'], () => {})) as PiAuthResultLite
-        if (!result?.accessToken || !result?.user?.uid) {
-          throw new Error('Pi authentication was cancelled or failed.')
-        }
-        piAuth = result
-      } catch (sdkErr) {
-        console.error('[PiAuthProvider] Pi authentication failed:', sdkErr)
-        throw new Error('Pi authentication was cancelled or failed.')
-      }
-
-      const result = await invokeEdge(piAuth)
-      if (!result.ok) {
-        throw new Error(result.message)
-      }
-
-      const { token, user, error } = result.data
-      if (!token || !user) {
-        throw new Error(error ?? 'Authentication service unavailable.')
-      }
-
-      finalizeSession(token, user)
+      // If already logged in (manual account), link Pi to it; otherwise log in / provision.
+      const linking = !!getToken()
+      const { token, user, isNewUser } = await authApi.pi(
+        { accessToken: piAuth.accessToken, walletAddress: piAuth.user?.wallet_address },
+        { link: linking },
+      )
+      setToken(token)
+      // Fresh login switches identity — drop cached data. Linking keeps the same user.
+      if (!linking) queryClient.clear()
+      setCurrentUser(user)
+      return { user, isNewUser: !!isNewUser }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Pi authentication was cancelled or failed.'
+      const message = messageFromError(err, 'Could not log in with Pi. Please try again.')
       setAuthError(message)
-      throw err instanceof Error ? err : new Error(message)
-    } finally {
-      setIsLoading(false)
+      throw err
     }
-  }, [finalizeSession, invokeEdge])
+  }, [setCurrentUser, queryClient])
 
   const logout = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('pibazaar-token')
-      document.cookie = 'pibazaar-token=; path=/; max-age=0'
-    }
+    authApi.logout().catch(() => {})
+    setToken(null)
     setCurrentUser(null)
+    // Drop all cached server data so the next user never sees the previous one's.
+    queryClient.clear()
     navigate('/login')
-  }, [setCurrentUser])
+  }, [navigate, setCurrentUser, queryClient])
 
   return (
-    <AuthContext.Provider value={{ loginWithPi, logout, isLoading, authError }}>
+    <AuthContext.Provider
+      value={{
+        user: currentUser,
+        isAuthenticated: !!currentUser,
+        isLoading,
+        authError,
+        clearError,
+        signup,
+        login,
+        loginWithPi,
+        logout,
+        refresh,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
