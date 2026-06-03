@@ -38,18 +38,16 @@ Files that imported `next/server` or `next/headers` were stubbed to `export {}`:
 ## Web build env (quirk)
 - The pibazaar web build/dev throws unless `PORT` and `BASE_PATH` env vars are set (vite config reads them eagerly). Build locally with `PORT=5000 BASE_PATH=/ NODE_ENV=production pnpm build`.
 
-## Mobile (Expo) migration off Supabase
-- The Expo app (`artifacts/pibazaar-mobile`) uses a hand-rolled typed client (`lib/api/{types,client,hooks}.ts`) mirroring the web client, NOT generated from `lib/api-spec/openapi.yaml` (that spec only defines `/healthz`). Base URL is absolute via `EXPO_PUBLIC_DOMAIN`; JWT in AsyncStorage key `@pibazaar/session_token`; realtime over RN `WebSocket` in `lib/realtime.ts`.
-- **Why:** the OpenAPI spec is not the source of truth for app endpoints — `API_CONTRACT.md` is. Don't try to codegen the mobile client.
+## Mobile (Expo) shares the web's contract, not its codegen
+- The Expo app mirrors the web's hand-rolled typed client; it is NOT generated from the repo's OpenAPI spec (that spec only covers `/healthz`). `API_CONTRACT.md` is the single source of truth for endpoints — don't try to codegen the mobile client.
+- **Why:** auth + data are owned by api-server; one contract, two thin clients keeps web and mobile in lockstep.
 
-## Escrow Pi payment funding (Pi-Browser-only)
-- Funding `pending → funded` requires a real Pi payment: client calls `createPiPayment({ amount: escrow.amountPi, memo, metadata: { escrowId } })` then `escrowApi.approve(id, paymentId)` (onReadyForServerApproval) and `escrowApi.complete(id, paymentId, txid)` (onReadyForServerCompletion). `window.Pi` only exists in the Pi Browser, so mobile uses `lib/pi.ts` `isPiAvailable()` to degrade gracefully on native/Expo Go.
-- **Why:** server verifies the payment amount + `metadata.escrowId` against the escrow (rejects mismatches); the buyer MUST bind the payment this way or it's rejected 400.
+## Pi payments only work inside the Pi Browser
+- Funding an escrow (`pending → funded`) needs a real Pi payment bound to the escrow: the buyer's payment must carry the escrow id and amount, and the server rejects (400) any payment whose amount/escrow-id don't match. `window.Pi` exists only in the Pi Browser, so mobile must feature-detect and degrade gracefully on native/Expo Go rather than assume the SDK is present.
 
-## Escrow lifecycle gating (must match server, api-server/src/routes/escrow.ts)
-- `ship` body key is `shippingCarrier` (NOT `carrier`).
-- `cancel` is allowed ONLY when status is `pending` ("Only unfunded escrows can be cancelled").
-- `confirm` (buyer release) allowed at `funded|shipped|delivered`. UI rule: shipping orders confirm at `shipped/delivered`; digital/other release types confirm at `funded`. Gate the confirm button with `!isMeetup` so local-meetup uses the separate meetup-code release flow instead.
+## Escrow lifecycle gating must mirror the server
+- The server is authoritative on state transitions; the UI must only offer actions the server will accept, or buttons 400. Durable rules: cancel is allowed ONLY while unfunded (`pending`); buyer release (`confirm`) is allowed at `funded|shipped|delivered` but UI should require shipping orders to reach `shipped/delivered` first while digital/other release at `funded`; local-meetup uses a separate meetup-code release, so exclude it from the generic confirm button.
+- **Why:** keeping web and mobile gating identical to the server prevents one client drifting into states the backend rejects.
 
 ## Image components
 - All `next/image` `<Image fill />` replaced with `<img className="w-full h-full object-cover" />`.

@@ -186,7 +186,13 @@ export default function DashboardScreen() {
             }
             renderItem={({ item }) => (
               <Pressable
-                onPress={() => router.push(`/product/${item.id}`)}
+                onPress={() =>
+                  router.push(
+                    item.status === "draft"
+                      ? `/create?id=${item.id}`
+                      : `/product/${item.id}`,
+                  )
+                }
                 style={({ pressed }) => [
                   styles.card,
                   {

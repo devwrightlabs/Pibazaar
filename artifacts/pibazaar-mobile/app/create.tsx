@@ -2,8 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router, Stack } from "expo-router";
-import React, { useState } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { uploadFile } from "@/lib/api/client";
-import { useCreateListing } from "@/lib/api/hooks";
+import { useCreateListing, useListing, useUpdateListing } from "@/lib/api/hooks";
 import {
   EMPTY_DRAFT,
   type ListingCondition,
@@ -51,11 +51,41 @@ export default function CreateScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
   const createListing = useCreateListing();
+  const updateListing = useUpdateListing();
+  const { data: existing, isLoading: loadingExisting } = useListing(editId);
 
   const [draft, setDraft] = useState<ListingDraft>(EMPTY_DRAFT);
   const [priceText, setPriceText] = useState("");
   const [uploading, setUploading] = useState(false);
+  const hydratedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!editId || hydratedFor.current === editId || !existing?.listing) return;
+    const l = existing.listing;
+    hydratedFor.current = editId;
+    setDraft({
+      serverId: l.id,
+      title: l.title ?? "",
+      description: l.description ?? "",
+      priceInPi: l.priceInPi ?? 0,
+      category: l.category ?? "",
+      condition: l.condition ?? "good",
+      productType: l.productType ?? "physical",
+      images: l.images ?? [],
+      city: l.city ?? "",
+      country: l.country ?? "",
+      allowOffers: l.allowOffers ?? true,
+      shippingCarrier: l.shippingCarrier ?? null,
+    });
+    setPriceText(l.priceInPi ? String(l.priceInPi) : "");
+  }, [editId, existing]);
+
+  const isEditing = !!draft.serverId;
+  const editLoading = !!editId && loadingExisting && hydratedFor.current !== editId;
+  const isSaving =
+    createListing.isPending || updateListing.isPending || editLoading;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 24;
@@ -100,52 +130,76 @@ export default function CreateScreen() {
   const removeImage = (index: number) =>
     setDraft((d) => ({ ...d, images: d.images.filter((_, i) => i !== index) }));
 
-  const handleSubmit = async () => {
+  const buildBody = (status: "active" | "draft"): ListingInput => {
+    const price = Number(priceText);
+    return {
+      title: draft.title.trim(),
+      description: draft.description.trim() || undefined,
+      priceInPi: price > 0 ? price : status === "draft" ? undefined : price,
+      category: draft.category || undefined,
+      condition: draft.condition,
+      productType: draft.productType,
+      images: draft.images,
+      city: draft.city.trim() || undefined,
+      country: draft.country.trim() || undefined,
+      allowOffers: draft.allowOffers,
+      shippingCarrier: draft.shippingCarrier ?? undefined,
+      status,
+    };
+  };
+
+  const save = async (status: "active" | "draft") => {
     if (!user) {
       router.push("/login");
       return;
     }
-    const price = Number(priceText);
-    if (!draft.title.trim()) {
-      Alert.alert("Missing title", "Please add a title for your listing.");
-      return;
-    }
-    if (!price || price <= 0) {
-      Alert.alert("Invalid price", "Please enter a price greater than 0.");
-      return;
-    }
-    if (draft.images.length < 1) {
-      Alert.alert("Add a photo", "Please add at least one photo.");
-      return;
-    }
-    if (!draft.category) {
-      Alert.alert("Pick a category", "Please choose a category.");
+
+    if (status === "active") {
+      const price = Number(priceText);
+      if (!draft.title.trim()) {
+        Alert.alert("Missing title", "Please add a title for your listing.");
+        return;
+      }
+      if (!price || price <= 0) {
+        Alert.alert("Invalid price", "Please enter a price greater than 0.");
+        return;
+      }
+      if (draft.images.length < 1) {
+        Alert.alert("Add a photo", "Please add at least one photo.");
+        return;
+      }
+      if (!draft.category) {
+        Alert.alert("Pick a category", "Please choose a category.");
+        return;
+      }
+    } else if (!draft.title.trim() && draft.images.length < 1) {
+      Alert.alert(
+        "Nothing to save",
+        "Add a title or at least one photo before saving a draft.",
+      );
       return;
     }
 
-    const body: ListingInput = {
-      title: draft.title.trim(),
-      description: draft.description.trim(),
-      priceInPi: price,
-      category: draft.category,
-      condition: draft.condition,
-      productType: draft.productType,
-      images: draft.images,
-      city: draft.city.trim(),
-      country: draft.country.trim(),
-      allowOffers: draft.allowOffers,
-      shippingCarrier: draft.shippingCarrier ?? undefined,
-      status: "active",
-    };
+    const body = buildBody(status);
 
     try {
-      await createListing.mutateAsync(body);
+      if (draft.serverId) {
+        await updateListing.mutateAsync({ id: draft.serverId, body });
+      } else {
+        await createListing.mutateAsync(body);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/dashboard");
     } catch (e: any) {
-      Alert.alert("Could not publish", e?.message ?? "Please try again.");
+      Alert.alert(
+        status === "draft" ? "Could not save draft" : "Could not publish",
+        e?.message ?? "Please try again.",
+      );
     }
   };
+
+  const handleSubmit = () => save("active");
+  const handleSaveDraft = () => save("draft");
 
   return (
     <>
@@ -164,16 +218,18 @@ export default function CreateScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerBtn}>
             <Feather name="chevron-left" size={26} color={colors.text} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>New listing</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {isEditing ? "Edit listing" : "New listing"}
+          </Text>
           <Pressable
             onPress={handleSubmit}
-            disabled={createListing.isPending}
+            disabled={isSaving}
             style={[
               styles.postBtn,
               { backgroundColor: colors.gold, borderRadius: colors.radius },
             ]}
           >
-            {createListing.isPending ? (
+            {isSaving ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
               <Text style={styles.postText}>Post</Text>
@@ -381,17 +437,17 @@ export default function CreateScreen() {
 
             <Pressable
               onPress={handleSubmit}
-              disabled={createListing.isPending}
+              disabled={isSaving}
               style={({ pressed }) => [
                 styles.submitBtn,
                 {
                   backgroundColor: colors.gold,
                   borderRadius: colors.radius,
-                  opacity: createListing.isPending || pressed ? 0.8 : 1,
+                  opacity: isSaving || pressed ? 0.8 : 1,
                 },
               ]}
             >
-              {createListing.isPending ? (
+              {isSaving ? (
                 <ActivityIndicator color="#000" />
               ) : (
                 <>
@@ -399,6 +455,25 @@ export default function CreateScreen() {
                   <Text style={styles.submitText}>Publish Listing</Text>
                 </>
               )}
+            </Pressable>
+
+            <Pressable
+              onPress={handleSaveDraft}
+              disabled={isSaving}
+              style={({ pressed }) => [
+                styles.draftBtn,
+                {
+                  backgroundColor: colors.secondary,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                  opacity: isSaving || pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Feather name="save" size={18} color={colors.text} />
+              <Text style={[styles.draftText, { color: colors.text }]}>
+                Save as draft
+              </Text>
             </Pressable>
           </ScrollView>
         )}
@@ -547,4 +622,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitText: { fontSize: 16, fontWeight: "700", color: "#000" },
+  draftBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderWidth: 1,
+  },
+  draftText: { fontSize: 15, fontWeight: "600" },
 });
