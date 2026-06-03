@@ -1,11 +1,11 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
   FlatList,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -15,36 +15,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-
-interface Notification {
-  id: string;
-  user_id: string;
-  type: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
-}
+import {
+  useNotifications,
+  useReadAllNotifications,
+  useReadNotification,
+} from "@/lib/api/hooks";
 
 const TYPE_ICON: Record<string, keyof typeof Feather.glyphMap> = {
   message: "message-circle",
   order: "shopping-bag",
+  escrow: "shield",
   listing: "package",
   offer: "tag",
+  review: "star",
   system: "info",
 };
-
-async function fetchNotifications(userId: string): Promise<Notification[]> {
-  if (!isSupabaseConfigured || !userId) return [];
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) return [];
-  return (data as Notification[]) ?? [];
-}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -61,11 +46,12 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
-  const { data: notifications = [], isLoading } = useQuery({
-    queryKey: ["notifications", user?.pi_uid],
-    queryFn: () => fetchNotifications(user?.pi_uid ?? ""),
-    enabled: !!user,
-  });
+  const { data, isLoading } = useNotifications();
+  const readOne = useReadNotification();
+  const readAll = useReadAllNotifications();
+
+  const notifications = data?.notifications ?? [];
+  const unread = data?.unread ?? 0;
 
   return (
     <>
@@ -76,11 +62,42 @@ export default function NotificationsScreen() {
           headerTintColor: colors.text,
           headerStyle: { backgroundColor: colors.background },
           headerShadowVisible: false,
+          headerRight: () =>
+            user && unread > 0 ? (
+              <Pressable
+                onPress={() => readAll.mutate()}
+                disabled={readAll.isPending}
+                style={{ marginRight: 4 }}
+              >
+                {readAll.isPending ? (
+                  <ActivityIndicator color={colors.gold} size="small" />
+                ) : (
+                  <Text style={[styles.headerBtn, { color: colors.gold }]}>
+                    Mark all read
+                  </Text>
+                )}
+              </Pressable>
+            ) : null,
         }}
       />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {!user ? (
-          <EmptyState icon="lock" title="Sign in to see notifications" />
+          <View style={styles.center}>
+            <EmptyState
+              icon="lock"
+              title="Sign in to see notifications"
+              subtitle="Stay up to date with orders and messages"
+            />
+            <Pressable
+              onPress={() => router.push("/login")}
+              style={[
+                styles.signInBtn,
+                { backgroundColor: colors.gold, borderRadius: colors.radius },
+              ]}
+            >
+              <Text style={styles.signInText}>Sign in</Text>
+            </Pressable>
+          </View>
         ) : isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.gold} />
@@ -91,6 +108,7 @@ export default function NotificationsScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{
               paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 24,
+              flexGrow: 1,
             }}
             ListEmptyComponent={
               <EmptyState
@@ -100,12 +118,17 @@ export default function NotificationsScreen() {
               />
             }
             renderItem={({ item }) => (
-              <View
+              <Pressable
+                onPress={() => {
+                  if (!item.isRead) readOne.mutate(item.id);
+                }}
                 style={[
                   styles.row,
                   {
                     borderBottomColor: colors.border,
-                    backgroundColor: item.is_read ? "transparent" : colors.gold + "11",
+                    backgroundColor: item.isRead
+                      ? "transparent"
+                      : colors.gold + "11",
                   },
                 ]}
               >
@@ -122,21 +145,30 @@ export default function NotificationsScreen() {
                   />
                 </View>
                 <View style={styles.content}>
-                  <Text style={[styles.message, { color: colors.text }]}>
-                    {item.message}
-                  </Text>
                   <Text
-                    style={[styles.time, { color: colors.mutedForeground }]}
+                    style={[styles.title, { color: colors.text }]}
+                    numberOfLines={2}
                   >
-                    {timeAgo(item.created_at)}
+                    {item.title}
+                  </Text>
+                  {item.body && (
+                    <Text
+                      style={[styles.body, { color: colors.mutedForeground }]}
+                      numberOfLines={2}
+                    >
+                      {item.body}
+                    </Text>
+                  )}
+                  <Text style={[styles.time, { color: colors.mutedForeground }]}>
+                    {timeAgo(item.createdAt)}
                   </Text>
                 </View>
-                {!item.is_read && (
+                {!item.isRead && (
                   <View
                     style={[styles.unread, { backgroundColor: colors.gold }]}
                   />
                 )}
-              </View>
+              </Pressable>
             )}
           />
         )}
@@ -148,6 +180,9 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  headerBtn: { fontSize: 14, fontWeight: "600" },
+  signInBtn: { paddingHorizontal: 32, paddingVertical: 12, marginTop: 8 },
+  signInText: { fontSize: 15, fontWeight: "700", color: "#000" },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -165,7 +200,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   content: { flex: 1 },
-  message: { fontSize: 14, lineHeight: 18 },
+  title: { fontSize: 14, fontWeight: "600", lineHeight: 18 },
+  body: { fontSize: 13, lineHeight: 17, marginTop: 2 },
   time: { fontSize: 11, marginTop: 3 },
   unread: {
     width: 8,

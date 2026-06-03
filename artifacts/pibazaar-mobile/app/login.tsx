@@ -1,11 +1,14 @@
 /**
- * Login — PiBazaar Mobile
+ * Login / Sign Up — PiBazaar Mobile
  *
- * Mirrors the web login page's UX and intent:
- * - Runs the Pi Browser authentication handshake (window.Pi is unavailable in
- *   React Native; the same PI_BROWSER_REQUIRED error the web surfaces is shown).
- * - Forwards verified Pi identity to the `pi-auth` Supabase Edge Function.
- * - Same backend contract as the web: acceptToken() → supabase.functions.invoke('pi-auth').
+ * Two-step auth against the self-contained Express backend (mirrors the web app):
+ *   1. Manual account: Sign Up or Log In with a username + password.
+ *   2. Pi: a separate "Log in with Pi" button that runs the Pi SDK handshake.
+ *      window.Pi is only available inside the Pi Browser, so outside it we surface
+ *      a clear "Pi Browser required" message instead of failing silently.
+ *
+ * A collapsible developer escape hatch accepts a raw Pi access token and completes
+ * the same /auth/pi flow (useful for testing outside the Pi Browser).
  */
 
 import { Feather } from "@expo/vector-icons";
@@ -17,6 +20,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -27,71 +31,116 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
+type Mode = "login" | "signup";
+
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, loginWithPi, acceptToken, authError, isLoading } = useAuth();
+  const {
+    user,
+    login,
+    signup,
+    loginWithPi,
+    acceptToken,
+    authError,
+    clearError,
+    isLoading,
+  } = useAuth();
 
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [mode, setMode] = useState<Mode>("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
-  const [uidInput, setUidInput] = useState("");
-  const [usernameInput, setUsernameInput] = useState("");
 
   useEffect(() => {
-    if (user) {
-      router.replace("/(tabs)/profile");
-    }
+    if (user) router.replace("/(tabs)/profile");
   }, [user]);
+
+  const switchMode = (next: Mode) => {
+    Haptics.selectionAsync();
+    clearError();
+    setMode(next);
+  };
+
+  const handleSubmit = async () => {
+    if (!username.trim() || !password) {
+      Alert.alert("Missing fields", "Enter a username and password.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        await signup({
+          username: username.trim(),
+          password,
+          email: email.trim() || undefined,
+        });
+      } else {
+        await login({ username: username.trim(), password });
+      }
+    } catch {
+      // authError is surfaced inline by the context.
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handlePiSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsSigningIn(true);
+    setBusy(true);
     try {
       await loginWithPi();
     } catch {
       Alert.alert(
         "Pi Browser Required",
-        "PiBazaar uses Pi Network authentication, which is only available inside the Pi Browser.\n\nOpen PiBazaar at pibazaar.app in your Pi Browser to sign in, then return here.",
-        [{ text: "OK" }]
+        "PiBazaar uses Pi Network authentication, which is only available inside the Pi Browser.\n\nYou can still sign up with a username and password, or open PiBazaar in your Pi Browser to use Pi login.",
+        [{ text: "OK" }],
       );
     } finally {
-      setIsSigningIn(false);
+      setBusy(false);
     }
   };
 
   const handleAcceptToken = async () => {
-    if (!tokenInput.trim() || !uidInput.trim() || !usernameInput.trim()) {
-      Alert.alert("Missing fields", "Please fill in all fields.");
+    if (!tokenInput.trim()) {
+      Alert.alert("Missing token", "Paste a Pi access token.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsSigningIn(true);
+    setBusy(true);
     try {
-      await acceptToken(tokenInput.trim(), uidInput.trim(), usernameInput.trim());
+      await acceptToken(tokenInput.trim());
     } catch (err) {
       Alert.alert(
         "Authentication failed",
-        err instanceof Error ? err.message : "Authentication service unavailable."
+        err instanceof Error ? err.message : "Authentication service unavailable.",
       );
     } finally {
-      setIsSigningIn(false);
+      setBusy(false);
     }
   };
+
+  const disabled = busy || isLoading;
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.inner,
           {
             paddingTop: insets.top + 40,
             paddingBottom: insets.bottom + 40,
           },
         ]}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.hero}>
           <View
@@ -106,31 +155,114 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>
-            Sign in with Pi
-          </Text>
-          <Text style={[styles.cardBody, { color: colors.mutedForeground }]}>
-            PiBazaar uses Pi Network authentication. Open PiBazaar in your{" "}
-            <Text style={{ color: colors.gold }}>Pi Browser</Text> to sign in
-            with your Pi account.
-          </Text>
-
-          <Pressable
-            onPress={handlePiSignIn}
-            disabled={isSigningIn || isLoading}
-            style={({ pressed }) => [
-              styles.piBtn,
-              {
-                backgroundColor: colors.gold,
-                borderRadius: colors.radius,
-                opacity: pressed || isSigningIn ? 0.8 : 1,
-              },
+          {/* Mode toggle */}
+          <View
+            style={[
+              styles.segment,
+              { backgroundColor: colors.secondary, borderRadius: colors.radius },
             ]}
           >
-            <Text style={styles.piBtnText}>
-              {isSigningIn ? "Connecting…" : "Sign in with Pi"}
-            </Text>
-          </Pressable>
+            {(["login", "signup"] as Mode[]).map((m) => (
+              <Pressable
+                key={m}
+                onPress={() => switchMode(m)}
+                style={[
+                  styles.segmentItem,
+                  {
+                    backgroundColor: mode === m ? colors.gold : "transparent",
+                    borderRadius: colors.radius - 2,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: mode === m ? "#000" : colors.mutedForeground },
+                  ]}
+                >
+                  {m === "login" ? "Log In" : "Sign Up"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Username"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.secondary,
+                  color: colors.text,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius / 2,
+                },
+              ]}
+            />
+            {mode === "signup" && (
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email (optional)"
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.secondary,
+                    color: colors.text,
+                    borderColor: colors.border,
+                    borderRadius: colors.radius / 2,
+                  },
+                ]}
+              />
+            )}
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+              secureTextEntry
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.secondary,
+                  color: colors.text,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius / 2,
+                },
+              ]}
+            />
+
+            <Pressable
+              onPress={handleSubmit}
+              disabled={disabled}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                {
+                  backgroundColor: colors.gold,
+                  borderRadius: colors.radius,
+                  opacity: pressed || disabled ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>
+                {busy
+                  ? "Please wait…"
+                  : mode === "signup"
+                    ? "Create account"
+                    : "Log in"}
+              </Text>
+            </Pressable>
+          </View>
 
           {authError && (
             <View
@@ -150,10 +282,36 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>
+              or
+            </Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </View>
+
+          <Pressable
+            onPress={handlePiSignIn}
+            disabled={disabled}
+            style={({ pressed }) => [
+              styles.piBtn,
+              {
+                borderColor: colors.gold,
+                borderRadius: colors.radius,
+                opacity: pressed || disabled ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.piBtnText, { color: colors.gold }]}>
+              Log in with Pi
+            </Text>
+          </Pressable>
+
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
-              setShowTokenInput(!showTokenInput);
+              setShowTokenInput((s) => !s);
             }}
             style={styles.developerToggle}
           >
@@ -174,41 +332,9 @@ export default function LoginScreen() {
               <Text
                 style={[styles.tokenFormLabel, { color: colors.mutedForeground }]}
               >
-                Enter a Pi access token from the Pi Browser web session to
-                authenticate via the same backend the web app uses.
+                Paste a Pi access token to authenticate via the same /auth/pi
+                endpoint the web app uses.
               </Text>
-              <TextInput
-                value={uidInput}
-                onChangeText={setUidInput}
-                placeholder="Pi UID"
-                placeholderTextColor={colors.mutedForeground}
-                autoCapitalize="none"
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.secondary,
-                    color: colors.text,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius / 2,
-                  },
-                ]}
-              />
-              <TextInput
-                value={usernameInput}
-                onChangeText={setUsernameInput}
-                placeholder="Pi username"
-                placeholderTextColor={colors.mutedForeground}
-                autoCapitalize="none"
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.secondary,
-                    color: colors.text,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius / 2,
-                  },
-                ]}
-              />
               <TextInput
                 value={tokenInput}
                 onChangeText={setTokenInput}
@@ -230,19 +356,19 @@ export default function LoginScreen() {
               />
               <Pressable
                 onPress={handleAcceptToken}
-                disabled={isSigningIn}
+                disabled={disabled}
                 style={({ pressed }) => [
                   styles.tokenSubmitBtn,
                   {
                     backgroundColor: colors.card,
                     borderColor: colors.border,
                     borderRadius: colors.radius / 2,
-                    opacity: pressed || isSigningIn ? 0.7 : 1,
+                    opacity: pressed || disabled ? 0.7 : 1,
                   },
                 ]}
               >
                 <Text style={[styles.tokenSubmitText, { color: colors.text }]}>
-                  {isSigningIn ? "Authenticating…" : "Authenticate"}
+                  {busy ? "Authenticating…" : "Authenticate"}
                 </Text>
               </Pressable>
             </View>
@@ -255,7 +381,7 @@ export default function LoginScreen() {
             Browse without signing in
           </Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -263,7 +389,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   inner: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 24,
     justifyContent: "center",
     gap: 32,
@@ -280,13 +406,29 @@ const styles = StyleSheet.create({
   appName: { fontSize: 28, fontWeight: "800" },
   tagline: { fontSize: 15 },
   card: { gap: 16 },
-  cardTitle: { fontSize: 20, fontWeight: "700" },
-  cardBody: { fontSize: 14, lineHeight: 20 },
-  piBtn: {
-    paddingVertical: 14,
+  segment: {
+    flexDirection: "row",
+    padding: 3,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 9,
     alignItems: "center",
   },
-  piBtnText: { fontSize: 16, fontWeight: "700", color: "#000" },
+  segmentText: { fontSize: 14, fontWeight: "700" },
+  form: { gap: 10 },
+  primaryBtn: {
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 2,
+  },
+  primaryBtnText: { fontSize: 16, fontWeight: "700", color: "#000" },
+  piBtn: {
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 1.5,
+  },
+  piBtnText: { fontSize: 15, fontWeight: "700" },
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -295,6 +437,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerText: { fontSize: 12 },
   developerToggle: {
     flexDirection: "row",
     alignItems: "center",

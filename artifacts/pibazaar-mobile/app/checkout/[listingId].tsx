@@ -1,42 +1,49 @@
 /**
  * Checkout — PiBazaar Mobile
  *
- * Mirrors the web checkout page (/checkout/:listingId):
- * - Fetches the listing from Supabase (same query as web)
- * - Shows item, price, and payment breakdown (item + service fee)
- * - Initiates a Pi payment via the pi-auth backend contract
- * - Pi.createPayment() is unavailable in React Native; the UI clearly explains
- *   this and routes the user to Pi Browser to complete the payment — the same
- *   requirement the web checkout has.
+ * Escrow checkout over the Express api-server:
+ * - Fetches the listing via useListing(listingId) for the order summary.
+ * - Derives releaseType from the listing's productType:
+ *     digital  -> "digital"
+ *     physical -> "shipping"  (buyer picks / adds a shipping address)
+ *     service  -> "local_meetup"
+ * - Confirm creates an escrow (useCreateEscrow) then routes to /orders/:id.
  */
 
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Listing } from "@/components/ListingCard";
+import {
+  useAddresses,
+  useCreateAddress,
+  useCreateEscrow,
+  useListing,
+} from "@/lib/api/hooks";
+import type { Address, ProductType, ReleaseType } from "@/lib/api/types";
 
-const SERVICE_FEE_RATE = 0.02;
+const PLATFORM_FEE_RATE = 0.02;
 
-function fmtPi(val: number): string {
-  return val.toFixed(4).replace(/\.?0+$/, "");
+function releaseTypeFor(productType: ProductType): ReleaseType {
+  if (productType === "digital") return "digital";
+  if (productType === "service") return "local_meetup";
+  return "shipping";
 }
 
 export default function CheckoutScreen() {
@@ -45,33 +52,92 @@ export default function CheckoutScreen() {
   const { listingId } = useLocalSearchParams<{ listingId: string }>();
   const { user } = useAuth();
 
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useListing(listingId);
+  const listing = data?.listing;
+
+  const releaseType: ReleaseType = listing
+    ? releaseTypeFor(listing.productType)
+    : "shipping";
+
+  const addressesQuery = useAddresses();
+  const addresses = addressesQuery.data?.addresses ?? [];
+  const createAddress = useCreateAddress();
+  const createEscrow = useCreateEscrow();
+
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
+    null
+  );
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({
+    fullName: "",
+    streetAddress: "",
+    city: "",
+    stateProvince: "",
+    postalCode: "",
+    countryCode: "",
+    phoneNumber: "",
+  });
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  useEffect(() => {
-    if (!listingId || !isSupabaseConfigured) {
-      setLoading(false);
+  const price = listing?.priceInPi ?? 0;
+  const platformFee = useMemo(() => price * PLATFORM_FEE_RATE, [price]);
+  const total = price + platformFee;
+
+  const effectiveAddressId =
+    selectedAddressId ?? addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? null;
+
+  const handleAddAddress = async () => {
+    if (!form.fullName.trim() || !form.streetAddress.trim() || !form.city.trim() || !form.countryCode.trim()) {
+      Alert.alert("Missing fields", "Full name, street, city and country code are required.");
       return;
     }
-
-    supabase
-      .from("listings")
-      .select("*")
-      .eq("id", listingId)
-      .eq("status", "active")
-      .single()
-      .then(({ data, error: err }) => {
-        if (err || !data) {
-          setError("Listing not found or no longer available.");
-        } else {
-          setListing(data as Listing);
-        }
-        setLoading(false);
+    try {
+      const res = await createAddress.mutateAsync({
+        fullName: form.fullName.trim(),
+        streetAddress: form.streetAddress.trim(),
+        city: form.city.trim(),
+        stateProvince: form.stateProvince.trim() || undefined,
+        postalCode: form.postalCode.trim() || undefined,
+        countryCode: form.countryCode.trim().toUpperCase(),
+        phoneNumber: form.phoneNumber.trim() || undefined,
       });
-  }, [listingId]);
+      setSelectedAddressId(res.address.id);
+      setShowAddForm(false);
+      setForm({
+        fullName: "",
+        streetAddress: "",
+        city: "",
+        stateProvince: "",
+        postalCode: "",
+        countryCode: "",
+        phoneNumber: "",
+      });
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to save address.");
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!listing) return;
+    if (releaseType === "shipping" && !effectiveAddressId) {
+      Alert.alert("Address required", "Please add or select a shipping address.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const res = await createEscrow.mutateAsync({
+        listingId: listing.id,
+        releaseType,
+        shippingAddressId:
+          releaseType === "shipping" ? effectiveAddressId ?? undefined : undefined,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace(`/orders/${res.escrow.id}`);
+    } catch (e: any) {
+      Alert.alert("Checkout failed", e?.message || "Could not create the order.");
+    }
+  };
 
   if (!user) {
     return (
@@ -87,9 +153,7 @@ export default function CheckoutScreen() {
           <Text style={[styles.gateTitle, { color: colors.text }]}>
             Sign in to check out
           </Text>
-          <Text
-            style={[styles.gateSubtitle, { color: colors.mutedForeground }]}
-          >
+          <Text style={[styles.gateSubtitle, { color: colors.mutedForeground }]}>
             You need a Pi account to make purchases on PiBazaar.
           </Text>
           <Pressable
@@ -106,7 +170,7 @@ export default function CheckoutScreen() {
     );
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <>
         <Stack.Screen options={{ title: "Checkout", headerShown: true }} />
@@ -128,7 +192,7 @@ export default function CheckoutScreen() {
         >
           <Feather name="alert-circle" size={32} color={colors.destructive} />
           <Text style={[styles.gateTitle, { color: colors.text }]}>
-            {error ?? "Listing unavailable"}
+            Listing unavailable
           </Text>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Text style={[styles.backBtnText, { color: colors.gold }]}>
@@ -140,34 +204,6 @@ export default function CheckoutScreen() {
     );
   }
 
-  const price = Number(listing.price_in_pi) || 0;
-  const serviceFee = price * SERVICE_FEE_RATE;
-  const total = price + serviceFee;
-
-  const handlePayWithPi = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Complete payment in Pi Browser",
-      `Pi payments require the Pi Browser app.\n\nAmount: π ${fmtPi(total)}\nItem: ${listing.title}\n\nTap "Open Pi Browser" to complete this purchase on the PiBazaar web app.`,
-      [
-        {
-          text: "Open Pi Browser",
-          onPress: () => {
-            Linking.openURL(
-              `https://pibazaar.app/checkout/${listingId}`
-            ).catch(() => {
-              Alert.alert(
-                "Could not open Pi Browser",
-                "Please open the Pi Browser app manually and navigate to PiBazaar."
-              );
-            });
-          },
-        },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
-  };
-
   const coverImage = listing.images?.[0];
 
   return (
@@ -176,12 +212,14 @@ export default function CheckoutScreen() {
       <ScrollView
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={{
-          paddingBottom: bottomPad + 100,
+          paddingBottom: bottomPad + 120,
           paddingHorizontal: 16,
           paddingTop: 16,
           gap: 16,
         }}
+        keyboardShouldPersistTaps="handled"
       >
+        {/* Item summary */}
         <View
           style={[
             styles.itemCard,
@@ -228,6 +266,7 @@ export default function CheckoutScreen() {
           </View>
         </View>
 
+        {/* Delivery method */}
         <View
           style={[
             styles.breakdownCard,
@@ -238,9 +277,175 @@ export default function CheckoutScreen() {
             },
           ]}
         >
-          <Text
-            style={[styles.sectionLabel, { color: colors.mutedForeground }]}
+          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+            Delivery method
+          </Text>
+          <View style={styles.methodRow}>
+            <Feather
+              name={
+                releaseType === "digital"
+                  ? "download"
+                  : releaseType === "local_meetup"
+                    ? "map-pin"
+                    : "truck"
+              }
+              size={18}
+              color={colors.gold}
+            />
+            <Text style={[styles.methodText, { color: colors.text }]}>
+              {releaseType === "digital"
+                ? "Digital delivery"
+                : releaseType === "local_meetup"
+                  ? "Local meetup"
+                  : "Shipping"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Shipping address (physical only) */}
+        {releaseType === "shipping" && (
+          <View
+            style={[
+              styles.breakdownCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
           >
+            <Text
+              style={[styles.sectionLabel, { color: colors.mutedForeground }]}
+            >
+              Shipping address
+            </Text>
+
+            {addressesQuery.isLoading ? (
+              <ActivityIndicator color={colors.gold} />
+            ) : (
+              addresses.map((addr: Address) => {
+                const selected = effectiveAddressId === addr.id;
+                return (
+                  <Pressable
+                    key={addr.id}
+                    onPress={() => setSelectedAddressId(addr.id)}
+                    style={[
+                      styles.addressRow,
+                      {
+                        borderColor: selected ? colors.gold : colors.border,
+                        borderRadius: colors.radius / 2,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={selected ? "check-circle" : "circle"}
+                      size={18}
+                      color={selected ? colors.gold : colors.mutedForeground}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.addressName, { color: colors.text }]}>
+                        {addr.fullName}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.addressLine,
+                          { color: colors.mutedForeground },
+                        ]}
+                      >
+                        {addr.streetAddress}, {addr.city}
+                        {addr.stateProvince ? `, ${addr.stateProvince}` : ""} ·{" "}
+                        {addr.countryCode}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+
+            {showAddForm ? (
+              <View style={styles.addForm}>
+                {(
+                  [
+                    ["fullName", "Full name"],
+                    ["streetAddress", "Street address"],
+                    ["city", "City"],
+                    ["stateProvince", "State / Province (optional)"],
+                    ["postalCode", "Postal code (optional)"],
+                    ["countryCode", "Country code (e.g. US)"],
+                    ["phoneNumber", "Phone (optional)"],
+                  ] as [keyof typeof form, string][]
+                ).map(([key, placeholder]) => (
+                  <TextInput
+                    key={key}
+                    style={[
+                      styles.input,
+                      {
+                        color: colors.text,
+                        backgroundColor: colors.secondary,
+                        borderColor: colors.border,
+                        borderRadius: colors.radius / 2,
+                      },
+                    ]}
+                    value={form[key]}
+                    onChangeText={(t) => setForm((f) => ({ ...f, [key]: t }))}
+                    placeholder={placeholder}
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCapitalize={key === "countryCode" ? "characters" : "sentences"}
+                  />
+                ))}
+                <View style={styles.formActions}>
+                  <Pressable
+                    onPress={() => setShowAddForm(false)}
+                    style={styles.formCancel}
+                  >
+                    <Text
+                      style={[styles.formCancelText, { color: colors.mutedForeground }]}
+                    >
+                      Cancel
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleAddAddress}
+                    disabled={createAddress.isPending}
+                    style={[
+                      styles.formSave,
+                      { backgroundColor: colors.gold, borderRadius: colors.radius / 2 },
+                    ]}
+                  >
+                    {createAddress.isPending ? (
+                      <ActivityIndicator color="#000" size="small" />
+                    ) : (
+                      <Text style={styles.formSaveText}>Save address</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => setShowAddForm(true)}
+                style={styles.addAddressBtn}
+              >
+                <Feather name="plus" size={16} color={colors.gold} />
+                <Text style={[styles.addAddressText, { color: colors.gold }]}>
+                  Add new address
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* Payment breakdown */}
+        <View
+          style={[
+            styles.breakdownCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+            },
+          ]}
+        >
+          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
             Payment breakdown
           </Text>
           <View style={styles.breakdownRow}>
@@ -248,32 +453,28 @@ export default function CheckoutScreen() {
               Item price
             </Text>
             <Text style={[styles.breakdownVal, { color: colors.text }]}>
-              π {fmtPi(price)}
+              π {price.toFixed(2)}
             </Text>
           </View>
           <View style={styles.breakdownRow}>
-            <Text
-              style={[styles.breakdownKey, { color: colors.mutedForeground }]}
-            >
-              Service fee (2%)
+            <Text style={[styles.breakdownKey, { color: colors.mutedForeground }]}>
+              Platform fee (2%)
             </Text>
             <Text
               style={[styles.breakdownVal, { color: colors.mutedForeground }]}
             >
-              π {fmtPi(serviceFee)}
+              π {platformFee.toFixed(2)}
             </Text>
           </View>
           <View
             style={[styles.breakdownDivider, { backgroundColor: colors.border }]}
           />
           <View style={styles.breakdownRow}>
-            <Text
-              style={[styles.breakdownTotal, { color: colors.text }]}
-            >
+            <Text style={[styles.breakdownTotal, { color: colors.text }]}>
               Total
             </Text>
             <Text style={[styles.breakdownTotalVal, { color: colors.gold }]}>
-              π {fmtPi(total)}
+              π {total.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -288,10 +489,10 @@ export default function CheckoutScreen() {
             },
           ]}
         >
-          <Feather name="info" size={14} color={colors.gold} />
+          <Feather name="shield" size={14} color={colors.gold} />
           <Text style={[styles.infoText, { color: colors.text }]}>
-            Pi payments are processed in the Pi Browser. Tapping "Pay with π"
-            will open the Pi Browser to complete your payment securely.
+            Funds are held in escrow and released to the seller once you confirm
+            delivery.
           </Text>
         </View>
       </ScrollView>
@@ -308,27 +509,30 @@ export default function CheckoutScreen() {
       >
         <View style={styles.footerRow}>
           <View>
-            <Text
-              style={[styles.footerLabel, { color: colors.mutedForeground }]}
-            >
+            <Text style={[styles.footerLabel, { color: colors.mutedForeground }]}>
               Total due
             </Text>
             <Text style={[styles.footerTotal, { color: colors.gold }]}>
-              π {fmtPi(total)}
+              π {total.toFixed(2)}
             </Text>
           </View>
           <Pressable
-            onPress={handlePayWithPi}
+            onPress={handleConfirm}
+            disabled={createEscrow.isPending}
             style={({ pressed }) => [
               styles.payBtn,
               {
                 backgroundColor: colors.gold,
                 borderRadius: colors.radius,
-                opacity: pressed ? 0.85 : 1,
+                opacity: createEscrow.isPending || pressed ? 0.85 : 1,
               },
             ]}
           >
-            <Text style={styles.payBtnText}>Pay with π</Text>
+            {createEscrow.isPending ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.payBtnText}>Confirm order</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -378,6 +582,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 4,
   },
+  methodRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  methodText: { fontSize: 15, fontWeight: "600" },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+  },
+  addressName: { fontSize: 14, fontWeight: "600" },
+  addressLine: { fontSize: 12, marginTop: 2 },
+  addAddressBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+  },
+  addAddressText: { fontSize: 14, fontWeight: "600" },
+  addForm: { gap: 8, marginTop: 4 },
+  input: {
+    padding: 12,
+    fontSize: 14,
+    borderWidth: 1,
+  },
+  formActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  formCancel: { paddingHorizontal: 16, paddingVertical: 12, justifyContent: "center" },
+  formCancelText: { fontSize: 14, fontWeight: "600" },
+  formSave: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  formSaveText: { fontSize: 14, fontWeight: "700", color: "#000" },
   breakdownRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -416,6 +654,8 @@ const styles = StyleSheet.create({
   payBtn: {
     paddingHorizontal: 28,
     paddingVertical: 14,
+    minWidth: 140,
+    alignItems: "center",
   },
   payBtnText: { fontSize: 16, fontWeight: "700", color: "#000" },
 });

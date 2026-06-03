@@ -16,10 +16,17 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useRealtimeSync } from "@/lib/api/hooks";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+/** Keeps React Query caches live from backend WebSocket pushes. */
+function RealtimeBridge() {
+  useRealtimeSync();
+  return null;
+}
 
 function RootLayoutNav() {
   const colors = useColors();
@@ -37,9 +44,13 @@ function RootLayoutNav() {
       <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="create" options={{ headerShown: false }} />
       <Stack.Screen name="orders" options={{ headerShown: false }} />
+      <Stack.Screen name="orders/[orderId]" options={{ headerShown: false }} />
+      <Stack.Screen name="checkout/[listingId]" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="dashboard" options={{ headerShown: false }} />
+      <Stack.Screen name="shipping" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
     </Stack>
   );
@@ -66,6 +77,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <RealtimeBridge />
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
                 <RootLayoutNav />

@@ -15,53 +15,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
 
+import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { Listing } from "@/components/ListingCard";
-
-async function fetchListing(id: string): Promise<Listing | null> {
-  if (!isSupabaseConfigured) return null;
-  const { data, error } = await supabase
-    .from("listings")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (error) return null;
-  return data as Listing;
-}
-
-async function getOrCreateConversation(
-  currentUserId: string,
-  sellerId: string
-): Promise<string | null> {
-  if (!isSupabaseConfigured) return null;
-
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("id")
-    .or(
-      `and(participant_1.eq.${currentUserId},participant_2.eq.${sellerId}),and(participant_1.eq.${sellerId},participant_2.eq.${currentUserId})`
-    )
-    .limit(1)
-    .single();
-  if (existing?.id) return (existing as { id: string }).id;
-
-  const { data: created, error } = await supabase
-    .from("conversations")
-    .insert({
-      participant_1: currentUserId,
-      participant_2: sellerId,
-      last_message: "",
-      last_message_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-  if (error || !created) return null;
-  return (created as { id: string }).id;
-}
+import { useListing, useStartConversation } from "@/lib/api/hooks";
 
 export default function ProductDetailScreen() {
   const colors = useColors();
@@ -69,15 +27,48 @@ export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [imageIndex, setImageIndex] = useState(0);
-  const [contactingLoading, setContactingLoading] = useState(false);
 
-  const { data: listing, isLoading } = useQuery({
-    queryKey: ["listing", id],
-    queryFn: () => fetchListing(id),
-    enabled: !!id,
-  });
+  const { data, isLoading } = useListing(id);
+  const listing = data?.listing;
+  const seller = data?.seller;
+
+  const startConversation = useStartConversation();
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+
+  const isOwner = !!user && !!listing && user.id === listing.sellerId;
+
+  const handleMessageSeller = async () => {
+    if (!listing) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    try {
+      const result = await startConversation.mutateAsync({
+        recipientId: listing.sellerId,
+        listingId: listing.id,
+        content: `Hi! Is "${listing.title}" still available?`,
+      });
+      router.push(`/chat/${result.conversationId}`);
+    } catch (err) {
+      Alert.alert(
+        "Error",
+        err instanceof Error ? err.message : "Could not start conversation."
+      );
+    }
+  };
+
+  const handleBuyNow = () => {
+    if (!listing) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    router.push(`/checkout/${listing.id}`);
+  };
 
   return (
     <>
@@ -100,7 +91,11 @@ export default function ProductDetailScreen() {
           </View>
         ) : !listing ? (
           <View style={styles.loadingContainer}>
-            <Text style={{ color: colors.text }}>Listing not found</Text>
+            <EmptyState
+              icon="alert-circle"
+              title="Listing not found"
+              subtitle="This listing may have been removed."
+            />
           </View>
         ) : (
           <>
@@ -165,9 +160,9 @@ export default function ProductDetailScreen() {
             <View style={styles.details}>
               <View style={styles.priceRow}>
                 <Text style={[styles.price, { color: colors.gold }]}>
-                  π {listing.price_in_pi}
+                  π {listing.priceInPi.toFixed(2)}
                 </Text>
-                {listing.is_boosted && (
+                {listing.isBoosted && (
                   <View
                     style={[
                       styles.badge,
@@ -200,27 +195,53 @@ export default function ProductDetailScreen() {
                 </View>
               )}
 
-              {listing.condition && (
-                <View style={styles.row}>
-                  <Text
-                    style={[styles.metaLabel, { color: colors.mutedForeground }]}
-                  >
-                    Condition
-                  </Text>
-                  <Text
+              <View style={styles.tagsRow}>
+                {listing.condition && (
+                  <View
                     style={[
-                      styles.metaValue,
+                      styles.tag,
                       {
                         backgroundColor: colors.secondary,
-                        color: colors.text,
                         borderRadius: colors.radius / 2,
                       },
                     ]}
                   >
-                    {listing.condition?.replace("_", " ")}
-                  </Text>
-                </View>
-              )}
+                    <Text style={[styles.tagText, { color: colors.text }]}>
+                      {listing.condition.replace("_", " ")}
+                    </Text>
+                  </View>
+                )}
+                {listing.category && (
+                  <View
+                    style={[
+                      styles.tag,
+                      {
+                        backgroundColor: colors.secondary,
+                        borderRadius: colors.radius / 2,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: colors.text }]}>
+                      {listing.category}
+                    </Text>
+                  </View>
+                )}
+                {listing.productType && (
+                  <View
+                    style={[
+                      styles.tag,
+                      {
+                        backgroundColor: colors.secondary,
+                        borderRadius: colors.radius / 2,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.tagText, { color: colors.text }]}>
+                      {listing.productType}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               <View
                 style={[styles.divider, { backgroundColor: colors.border }]}
@@ -228,11 +249,68 @@ export default function ProductDetailScreen() {
               <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
                 Description
               </Text>
-              <Text
-                style={[styles.description, { color: colors.text }]}
-              >
-                {(listing as any).description || "No description provided."}
+              <Text style={[styles.description, { color: colors.text }]}>
+                {listing.description || "No description provided."}
               </Text>
+
+              {seller && (
+                <>
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border }]}
+                  />
+                  <Text
+                    style={[styles.sectionLabel, { color: colors.mutedForeground }]}
+                  >
+                    Seller
+                  </Text>
+                  <View
+                    style={[
+                      styles.sellerCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderRadius: colors.radius,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.sellerAvatar,
+                        { backgroundColor: colors.gold + "33" },
+                      ]}
+                    >
+                      <Feather name="user" size={20} color={colors.gold} />
+                    </View>
+                    <View style={styles.sellerInfo}>
+                      <View style={styles.sellerNameRow}>
+                        <Text
+                          style={[styles.sellerName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {seller.username}
+                        </Text>
+                        {seller.isVerified && (
+                          <Feather
+                            name="check-circle"
+                            size={14}
+                            color={colors.gold}
+                          />
+                        )}
+                      </View>
+                      <View style={styles.sellerMetaRow}>
+                        <Feather name="star" size={12} color={colors.gold} />
+                        <Text
+                          style={[
+                            styles.sellerMeta,
+                            { color: colors.mutedForeground },
+                          ]}
+                        >
+                          {seller.trustScore.toFixed(1)} trust score
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
           </>
         )}
@@ -249,51 +327,73 @@ export default function ProductDetailScreen() {
             },
           ]}
         >
-          <Pressable
-            onPress={async () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              if (!user) {
-                router.push("/login");
-                return;
-              }
-              if (listing.seller_id === user.pi_uid) {
-                Alert.alert("This is your listing", "You cannot contact yourself.");
-                return;
-              }
-              setContactingLoading(true);
-              try {
-                const convId = await getOrCreateConversation(
-                  user.pi_uid,
-                  listing.seller_id ?? ""
-                );
-                if (!convId) {
-                  Alert.alert("Error", "Could not open conversation. Please try again.");
-                  return;
-                }
-                router.push(`/chat/${convId}`);
-              } finally {
-                setContactingLoading(false);
-              }
-            }}
-            disabled={contactingLoading}
-            style={({ pressed }) => [
-              styles.contactBtn,
-              {
-                backgroundColor: colors.gold,
-                borderRadius: colors.radius,
-                opacity: pressed || contactingLoading ? 0.75 : 1,
-              },
-            ]}
-          >
-            {contactingLoading ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <>
-                <Feather name="message-circle" size={18} color="#000" />
-                <Text style={styles.contactBtnText}>Contact Seller</Text>
-              </>
-            )}
-          </Pressable>
+          {isOwner ? (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push("/dashboard");
+              }}
+              style={({ pressed }) => [
+                styles.contactBtn,
+                {
+                  backgroundColor: colors.secondary,
+                  borderRadius: colors.radius,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+            >
+              <Feather name="edit-2" size={18} color={colors.text} />
+              <Text style={[styles.contactBtnText, { color: colors.text }]}>
+                This is your listing
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={styles.ctaRow}>
+              <Pressable
+                onPress={handleMessageSeller}
+                disabled={startConversation.isPending}
+                style={({ pressed }) => [
+                  styles.messageBtn,
+                  {
+                    backgroundColor: colors.secondary,
+                    borderRadius: colors.radius,
+                    opacity: pressed || startConversation.isPending ? 0.75 : 1,
+                  },
+                ]}
+              >
+                {startConversation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.gold} />
+                ) : (
+                  <>
+                    <Feather
+                      name="message-circle"
+                      size={18}
+                      color={colors.text}
+                    />
+                    <Text
+                      style={[styles.messageBtnText, { color: colors.text }]}
+                    >
+                      Message
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={handleBuyNow}
+                style={({ pressed }) => [
+                  styles.buyBtn,
+                  {
+                    backgroundColor: colors.gold,
+                    borderRadius: colors.radius,
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}
+              >
+                <Feather name="shopping-bag" size={18} color="#000" />
+                <Text style={styles.contactBtnText}>Buy now</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       )}
     </>
@@ -369,19 +469,19 @@ const styles = StyleSheet.create({
   location: {
     fontSize: 13,
   },
-  row: {
+  tagsRow: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
   },
-  metaLabel: {
-    fontSize: 13,
+  tag: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  metaValue: {
+  tagText: {
     fontSize: 12,
     fontWeight: "600",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    textTransform: "capitalize",
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -397,6 +497,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  sellerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+  },
+  sellerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sellerInfo: {
+    flex: 1,
+  },
+  sellerNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sellerName: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  sellerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  sellerMeta: {
+    fontSize: 12,
+  },
   footer: {
     position: "absolute",
     bottom: 0,
@@ -405,6 +539,30 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  ctaRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  messageBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+  },
+  messageBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  buyBtn: {
+    flex: 1.4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
   },
   contactBtn: {
     flexDirection: "row",

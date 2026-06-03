@@ -11,20 +11,9 @@ import {
 } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import type { Listing } from "@/lib/api/types";
 
-export interface Listing {
-  id: string;
-  title: string;
-  price_in_pi: number;
-  images: string[];
-  city?: string;
-  country?: string;
-  condition?: string;
-  category?: string;
-  is_boosted?: boolean;
-  seller_id: string;
-  status?: string;
-}
+export type { Listing } from "@/lib/api/types";
 
 interface Props {
   listing: Listing;
@@ -54,7 +43,7 @@ export function ListingCard({ listing }: Props) {
         },
       ]}
     >
-      {listing.is_boosted && (
+      {listing.isBoosted && (
         <View style={[styles.boostBadge, { backgroundColor: colors.gold }]}>
           <Feather name="zap" size={10} color="#000" />
         </View>
@@ -83,7 +72,7 @@ export function ListingCard({ listing }: Props) {
           {listing.title}
         </Text>
         <Text style={[styles.price, { color: colors.gold }]}>
-          π {listing.price_in_pi}
+          π {listing.priceInPi}
         </Text>
         {(listing.city || listing.country) && (
           <Text

@@ -38,6 +38,19 @@ Files that imported `next/server` or `next/headers` were stubbed to `export {}`:
 ## Web build env (quirk)
 - The pibazaar web build/dev throws unless `PORT` and `BASE_PATH` env vars are set (vite config reads them eagerly). Build locally with `PORT=5000 BASE_PATH=/ NODE_ENV=production pnpm build`.
 
+## Mobile (Expo) migration off Supabase
+- The Expo app (`artifacts/pibazaar-mobile`) uses a hand-rolled typed client (`lib/api/{types,client,hooks}.ts`) mirroring the web client, NOT generated from `lib/api-spec/openapi.yaml` (that spec only defines `/healthz`). Base URL is absolute via `EXPO_PUBLIC_DOMAIN`; JWT in AsyncStorage key `@pibazaar/session_token`; realtime over RN `WebSocket` in `lib/realtime.ts`.
+- **Why:** the OpenAPI spec is not the source of truth for app endpoints — `API_CONTRACT.md` is. Don't try to codegen the mobile client.
+
+## Escrow Pi payment funding (Pi-Browser-only)
+- Funding `pending → funded` requires a real Pi payment: client calls `createPiPayment({ amount: escrow.amountPi, memo, metadata: { escrowId } })` then `escrowApi.approve(id, paymentId)` (onReadyForServerApproval) and `escrowApi.complete(id, paymentId, txid)` (onReadyForServerCompletion). `window.Pi` only exists in the Pi Browser, so mobile uses `lib/pi.ts` `isPiAvailable()` to degrade gracefully on native/Expo Go.
+- **Why:** server verifies the payment amount + `metadata.escrowId` against the escrow (rejects mismatches); the buyer MUST bind the payment this way or it's rejected 400.
+
+## Escrow lifecycle gating (must match server, api-server/src/routes/escrow.ts)
+- `ship` body key is `shippingCarrier` (NOT `carrier`).
+- `cancel` is allowed ONLY when status is `pending` ("Only unfunded escrows can be cancelled").
+- `confirm` (buyer release) allowed at `funded|shipped|delivered`. UI rule: shipping orders confirm at `shipped/delivered`; digital/other release types confirm at `funded`. Gate the confirm button with `!isMeetup` so local-meetup uses the separate meetup-code release flow instead.
+
 ## Image components
 - All `next/image` `<Image fill />` replaced with `<img className="w-full h-full object-cover" />`.
 

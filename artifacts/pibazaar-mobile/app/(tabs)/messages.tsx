@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React from "react";
 import {
@@ -15,29 +14,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useConversations } from "@/lib/api/hooks";
 
-interface Conversation {
-  id: string;
-  participant_1: string;
-  participant_2: string;
-  last_message: string;
-  last_message_at: string;
-}
-
-async function fetchConversations(userId: string): Promise<Conversation[]> {
-  if (!isSupabaseConfigured || !userId) return [];
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .or(`participant_1.eq.${userId},participant_2.eq.${userId}`)
-    .order("last_message_at", { ascending: false })
-    .limit(30);
-  if (error) throw error;
-  return (data as Conversation[]) ?? [];
-}
-
-function timeAgo(iso: string): string {
+function timeAgo(iso: string | null): string {
+  if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "now";
@@ -53,16 +33,8 @@ export default function MessagesScreen() {
   const { user } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
-  const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ["conversations", user?.pi_uid],
-    queryFn: () => fetchConversations(user?.pi_uid ?? ""),
-    enabled: !!user,
-  });
-
-  const otherParticipant = (conv: Conversation) =>
-    conv.participant_1 === user?.pi_uid
-      ? conv.participant_2
-      : conv.participant_1;
+  const { data, isLoading } = useConversations();
+  const conversations = data?.conversations ?? [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -80,11 +52,26 @@ export default function MessagesScreen() {
       </View>
 
       {!user ? (
-        <EmptyState
-          icon="lock"
-          title="Sign in to see messages"
-          subtitle="Connect with buyers and sellers after signing in"
-        />
+        <View style={styles.authWrap}>
+          <EmptyState
+            icon="lock"
+            title="Sign in to see messages"
+            subtitle="Connect with buyers and sellers after signing in"
+          />
+          <Pressable
+            onPress={() => router.push("/login")}
+            style={({ pressed }) => [
+              styles.signInBtn,
+              {
+                backgroundColor: colors.gold,
+                borderRadius: colors.radius,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Text style={styles.signInBtnText}>Sign in</Text>
+          </Pressable>
+        </View>
       ) : isLoading ? (
         <FlatList
           data={Array(6).fill(null)}
@@ -117,10 +104,7 @@ export default function MessagesScreen() {
               ]}
             >
               <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: colors.gold + "33" },
-                ]}
+                style={[styles.avatar, { backgroundColor: colors.gold + "33" }]}
               >
                 <Feather name="user" size={20} color={colors.gold} />
               </View>
@@ -130,20 +114,35 @@ export default function MessagesScreen() {
                     style={[styles.participant, { color: colors.text }]}
                     numberOfLines={1}
                   >
-                    {otherParticipant(item)}
+                    {item.otherUser?.username ?? "Unknown user"}
                   </Text>
-                  <Text
-                    style={[styles.time, { color: colors.mutedForeground }]}
-                  >
-                    {timeAgo(item.last_message_at)}
+                  <Text style={[styles.time, { color: colors.mutedForeground }]}>
+                    {timeAgo(item.lastMessageAt)}
                   </Text>
                 </View>
-                <Text
-                  style={[styles.lastMsg, { color: colors.mutedForeground }]}
-                  numberOfLines={1}
-                >
-                  {item.last_message || "No messages yet"}
-                </Text>
+                {item.listingTitle && (
+                  <Text
+                    style={[styles.listing, { color: colors.gold }]}
+                    numberOfLines={1}
+                  >
+                    {item.listingTitle}
+                  </Text>
+                )}
+                <View style={styles.rowBottom}>
+                  <Text
+                    style={[styles.lastMsg, { color: colors.mutedForeground }]}
+                    numberOfLines={1}
+                  >
+                    {item.lastMessage || "No messages yet"}
+                  </Text>
+                  {item.unread > 0 && (
+                    <View
+                      style={[styles.unreadBadge, { backgroundColor: colors.gold }]}
+                    >
+                      <Text style={styles.unreadText}>{item.unread}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </Pressable>
           )}
@@ -189,6 +188,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   heading: { fontSize: 26, fontWeight: "700" },
+  authWrap: { flex: 1 },
+  signInBtn: {
+    marginHorizontal: 32,
+    marginBottom: 48,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  signInBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -208,6 +219,27 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: "row", justifyContent: "space-between" },
   participant: { fontSize: 15, fontWeight: "600", flex: 1, marginRight: 8 },
   time: { fontSize: 12 },
-  lastMsg: { fontSize: 13, marginTop: 2 },
+  listing: { fontSize: 12, fontWeight: "600", marginTop: 2 },
+  rowBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+    gap: 8,
+  },
+  lastMsg: { fontSize: 13, flex: 1 },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unreadText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#000",
+  },
   skeletonLine: { borderRadius: 4 },
 });

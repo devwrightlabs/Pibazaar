@@ -1,5 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FlatList,
   Platform,
@@ -10,55 +9,33 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
-import { ListingCard, ListingCardSkeleton, type Listing } from "@/components/ListingCard";
+import { ListingCard, ListingCardSkeleton } from "@/components/ListingCard";
 import { SearchBar } from "@/components/SearchBar";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useListings } from "@/lib/api/hooks";
 
 const CATEGORIES = ["All", "Electronics", "Fashion", "Home", "Services", "Digital", "Vehicles", "Other"];
-
-async function fetchListings(): Promise<Listing[]> {
-  if (!isSupabaseConfigured) return [];
-  const { data, error } = await supabase
-    .from("listings")
-    .select("*")
-    .eq("status", "active")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return (data as Listing[]) ?? [];
-}
 
 export default function BrowseScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState("All");
 
-  const { data: listings = [], isLoading } = useQuery({
-    queryKey: ["listings", "browse"],
-    queryFn: fetchListings,
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data, isLoading } = useListings({
+    q: debouncedSearch || undefined,
+    category: category === "All" ? undefined : category.toLowerCase(),
+    sort: "recent",
+    limit: 50,
   });
 
-  const filtered = useMemo(() => {
-    let result = listings;
-    if (category !== "All") {
-      result = result.filter(
-        (l) => l.category?.toLowerCase() === category.toLowerCase()
-      );
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.title.toLowerCase().includes(q) ||
-          l.city?.toLowerCase().includes(q) ||
-          l.country?.toLowerCase().includes(q)
-      );
-    }
-    return result;
-  }, [listings, search, category]);
+  const listings = data?.listings ?? [];
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -130,7 +107,7 @@ export default function BrowseScreen() {
         />
       ) : (
         <FlatList
-          data={filtered}
+          data={listings}
           numColumns={2}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
@@ -141,7 +118,7 @@ export default function BrowseScreen() {
             },
           ]}
           columnWrapperStyle={styles.row}
-          scrollEnabled={!!filtered.length}
+          scrollEnabled={!!listings.length}
           ListEmptyComponent={
             <EmptyState
               icon="search"

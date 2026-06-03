@@ -131,7 +131,7 @@ export default function ProfileScreen() {
           {user.username}
         </Text>
         <Text style={[styles.uid, { color: colors.mutedForeground }]}>
-          {user.pi_uid}
+          {user.id}
         </Text>
       </View>
 
@@ -165,6 +165,11 @@ export default function ProfileScreen() {
             icon="bell"
             label="Notifications"
             onPress={() => router.push("/notifications")}
+          />
+          <MenuItem
+            icon="truck"
+            label="Shipping carriers"
+            onPress={() => router.push("/shipping")}
           />
           <MenuItem
             icon="settings"

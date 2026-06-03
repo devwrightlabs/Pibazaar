@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React from "react";
@@ -14,39 +13,22 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ListingCard, ListingCardSkeleton, type Listing } from "@/components/ListingCard";
+import { ListingCard, ListingCardSkeleton } from "@/components/ListingCard";
 import { EmptyState } from "@/components/EmptyState";
 import { useColors } from "@/hooks/useColors";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-
-async function fetchFeed(): Promise<Listing[]> {
-  if (!isSupabaseConfigured) return [];
-  const { data, error } = await supabase
-    .from("listings")
-    .select("*")
-    .eq("status", "active")
-    .is("deleted_at", null)
-    .order("is_boosted", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(30);
-  if (error) throw error;
-  return (data as Listing[]) ?? [];
-}
+import { useListings } from "@/lib/api/hooks";
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
-  const {
-    data: listings = [],
-    isLoading,
-    refetch,
-    isRefetching,
-  } = useQuery({
-    queryKey: ["listings", "feed"],
-    queryFn: fetchFeed,
+  const { data, isLoading, refetch, isRefetching, isFetching } = useListings({
+    sort: "recent",
+    limit: 30,
   });
+
+  const listings = data?.listings ?? [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -109,7 +91,7 @@ export default function HomeScreen() {
           scrollEnabled={!!listings.length}
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
+              refreshing={isRefetching || isFetching}
               onRefresh={refetch}
               tintColor={colors.gold}
             />
@@ -125,11 +107,7 @@ export default function HomeScreen() {
             <EmptyState
               icon="package"
               title="No listings yet"
-              subtitle={
-                isSupabaseConfigured
-                  ? "Be the first to sell on PiBazaar!"
-                  : "Connect Supabase to see listings"
-              }
+              subtitle="Be the first to sell on PiBazaar!"
             />
           }
           renderItem={({ item }) => <ListingCard listing={item} />}
