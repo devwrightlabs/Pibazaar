@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import MarketplaceFeed from '@/components/marketplace/MarketplaceFeed'
 import PullToRefresh from '@/components/marketplace/PullToRefresh'
-import MapWrapper, { MapSkeleton } from '@/components/MapWrapper'
+import MapWrapper from '@/components/MapWrapper'
 import MapModal from '@/components/MapModal'
 import LeftSidebar from '@/components/layout/LeftSidebar'
 
@@ -18,45 +18,33 @@ const SKELETON_GRID_COUNT = 6
 
 function FeedSkeleton() {
   return (
-    <div className="flex flex-col lg:flex-row gap-6 px-4">
-      {/* Left column skeleton (listings) */}
-      <div className="flex-1 min-w-0 flex flex-col gap-4">
-        <div className="flex items-center justify-between mb-1">
-          <div className="skeleton-shimmer h-5 w-40 rounded" />
-          <div className="skeleton-shimmer h-4 w-16 rounded" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {Array.from({ length: SKELETON_GRID_COUNT }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-2xl overflow-hidden"
-              style={{
-                backgroundColor: 'var(--color-card-bg)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              <div className="skeleton-shimmer w-full aspect-square" />
-              <div className="p-3 space-y-2">
-                <div className="skeleton-shimmer h-3 rounded w-4/5" />
-                <div className="skeleton-shimmer h-3 rounded w-3/5" />
-                <div className="skeleton-shimmer h-4 rounded w-2/5" />
-              </div>
-              <div className="flex gap-2 px-3 pb-3">
-                <div className="skeleton-shimmer h-8 rounded-lg flex-1" />
-                <div className="skeleton-shimmer h-8 rounded-lg flex-1" />
-              </div>
+    <div className="px-4 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-3">
+        <div className="skeleton-shimmer h-5 w-40 rounded" />
+        <div className="skeleton-shimmer h-4 w-16 rounded" />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {Array.from({ length: SKELETON_GRID_COUNT }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-2xl overflow-hidden"
+            style={{
+              backgroundColor: 'var(--color-card-bg)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <div className="skeleton-shimmer w-full aspect-square" />
+            <div className="p-3 space-y-2">
+              <div className="skeleton-shimmer h-3 rounded w-4/5" />
+              <div className="skeleton-shimmer h-3 rounded w-3/5" />
+              <div className="skeleton-shimmer h-4 rounded w-2/5" />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right column skeleton (map) */}
-      <div className="hidden lg:block w-[380px] shrink-0">
-        <MapSkeleton height="400px" />
-      </div>
-      {/* Mobile map skeleton */}
-      <div className="lg:hidden">
-        <MapSkeleton height="260px" />
+            <div className="flex gap-2 px-3 pb-3">
+              <div className="skeleton-shimmer h-8 rounded-lg flex-1" />
+              <div className="skeleton-shimmer h-8 rounded-lg flex-1" />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -69,7 +57,7 @@ export default function HomePage() {
   const { handleLogin, loading: authLoading, error: authError } = usePiAuth()
   const [refreshKey, setRefreshKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [mapModalOpen, setMapModalOpen] = useState(false)
+  const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [pageReady, setPageReady] = useState(false)
   const [discoveryView, setDiscoveryView] = useState<'list' | 'map'>('list')
 
@@ -183,26 +171,62 @@ export default function HomePage() {
                 </button>
               ) : null}
             </div>
-            <div className="mt-3 max-w-7xl mx-auto flex items-center gap-2">
-              <button
-                onClick={() => setDiscoveryView('list')}
-                className="rounded-xl px-4 py-2 text-sm font-semibold"
-                style={{
-                  color: discoveryView === 'list' ? 'var(--color-text)' : 'var(--color-subtext)',
-                  backgroundColor: discoveryView === 'list' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
-                }}
+
+            {/* ── Layout toggle + location picker (large, near the top) ──── */}
+            <div className="mt-3 max-w-7xl mx-auto flex items-center justify-between gap-3">
+              {/* Enlarged segmented layout toggle */}
+              <div
+                className="inline-flex p-1 rounded-2xl"
+                style={{ backgroundColor: 'var(--color-control-bg)' }}
+                role="tablist"
+                aria-label="Discovery layout"
               >
-                List
-              </button>
+                <button
+                  role="tab"
+                  aria-selected={discoveryView === 'list'}
+                  onClick={() => setDiscoveryView('list')}
+                  className="rounded-xl px-6 text-base font-bold transition-all active:scale-95"
+                  style={{
+                    minHeight: 44,
+                    color: discoveryView === 'list' ? '#000' : 'var(--color-subtext)',
+                    backgroundColor: discoveryView === 'list' ? 'var(--color-gold)' : 'transparent',
+                  }}
+                >
+                  List
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={discoveryView === 'map'}
+                  onClick={() => setDiscoveryView('map')}
+                  className="rounded-xl px-6 text-base font-bold transition-all active:scale-95"
+                  style={{
+                    minHeight: 44,
+                    color: discoveryView === 'map' ? '#000' : 'var(--color-subtext)',
+                    backgroundColor: discoveryView === 'map' ? 'var(--color-gold)' : 'transparent',
+                  }}
+                >
+                  Map
+                </button>
+              </div>
+
+              {/* Choose a location → opens the location modal */}
               <button
-                onClick={() => setDiscoveryView('map')}
-                className="rounded-xl px-4 py-2 text-sm font-semibold"
+                onClick={() => setLocationModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-all active:scale-95"
                 style={{
-                  color: discoveryView === 'map' ? 'var(--color-text)' : 'var(--color-subtext)',
-                  backgroundColor: discoveryView === 'map' ? 'var(--color-secondary-bg)' : 'var(--color-control-bg)',
+                  minHeight: 44,
+                  backgroundColor: 'var(--color-control-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
                 }}
+                aria-label="Choose a location"
               >
-                Map
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                  <circle cx="12" cy="9" r="2.5" />
+                </svg>
+                <span className="hidden sm:inline">Choose a location</span>
+                <span className="sm:hidden">Location</span>
               </button>
             </div>
           </section>
@@ -218,7 +242,7 @@ export default function HomePage() {
                 Radius: {mapRadius} km
               </label>
               <button
-                onClick={() => setMapModalOpen(true)}
+                onClick={() => setLocationModalOpen(true)}
                 className="text-xs font-semibold"
                 style={{ color: 'var(--color-gold)' }}
               >
@@ -239,7 +263,7 @@ export default function HomePage() {
                 <MapWidget
                   isAuthenticated={isAuthenticated}
                   onLogin={() => void handleLogin()}
-                  onExpand={() => setMapModalOpen(true)}
+                  onExpand={() => setLocationModalOpen(true)}
                   height="calc(100dvh - 300px)"
                   radius={mapRadius}
                 />
@@ -247,48 +271,25 @@ export default function HomePage() {
             </ErrorBoundary>
           </div>
         ) : (
-          <div className="flex flex-col lg:flex-row gap-6 px-4 pb-24 max-w-7xl mx-auto">
-            {/* ── Left column: Listings ─────────────────────────────────── */}
-            <div className="flex-1 min-w-0">
-              {/* Trending section header */}
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold font-heading" style={{ color: 'var(--color-text)' }}>
-                  Trending Near You
-                </h2>
-                <span className="text-xs font-medium" style={{ color: 'var(--color-gold)' }}>
-                  View All
-                </span>
-              </div>
-
-              {/* Mobile map widget (above listings on small screens) */}
-              <div className="lg:hidden mb-4">
-                <MapWidget
-                  isAuthenticated={isAuthenticated}
-                  onLogin={() => void handleLogin()}
-                  onExpand={() => setMapModalOpen(true)}
-                  height="clamp(260px, 42dvh, 420px)"
-                  radius={mapRadius}
-                />
-              </div>
-
-              {/* Marketplace feed */}
-              <ErrorBoundary>
-                <MarketplaceFeed key={refreshKey} />
-              </ErrorBoundary>
+          /* ── List view: listings take the full width; the map lives behind
+                the "Choose a location" header so it never blocks shopping. ── */
+          <div className="px-4 pb-24 max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold font-heading" style={{ color: 'var(--color-text)' }}>
+                Trending Near You
+              </h2>
+              <button
+                onClick={() => setLocationModalOpen(true)}
+                className="text-xs font-semibold"
+                style={{ color: 'var(--color-gold)' }}
+              >
+                View All
+              </button>
             </div>
 
-            {/* ── Right column: Map widget (desktop) ───────────────────── */}
-            <div className="hidden lg:block w-[380px] shrink-0">
-              <div className="sticky top-20">
-                <MapWidget
-                  isAuthenticated={isAuthenticated}
-                  onLogin={() => void handleLogin()}
-                  onExpand={() => setMapModalOpen(true)}
-                  height="400px"
-                  radius={mapRadius}
-                />
-              </div>
-            </div>
+            <ErrorBoundary>
+              <MarketplaceFeed key={refreshKey} />
+            </ErrorBoundary>
           </div>
         )}
       </PullToRefresh>
@@ -298,13 +299,13 @@ export default function HomePage() {
         <LeftSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       </ErrorBoundary>
 
-      {/* Full-screen map modal */}
-      <MapModal open={mapModalOpen} onClose={() => setMapModalOpen(false)} />
+      {/* Location modal (map + "Locate me") */}
+      <MapModal open={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
     </main>
   )
 }
 
-/* ─── Map Widget (shared between mobile + desktop) ─────────────────────── */
+/* ─── Map Widget (used by the opt-in Map view) ────────────────────────── */
 
 interface MapWidgetProps {
   isAuthenticated: boolean

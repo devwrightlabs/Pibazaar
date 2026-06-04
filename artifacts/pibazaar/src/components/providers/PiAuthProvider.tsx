@@ -32,13 +32,16 @@ import type {
 const PI_BROWSER_REQUIRED_MESSAGE =
   'Please open PiBazaar inside the Pi Browser to log in with Pi.'
 
+const PI_SIGNUP_REQUIRED_MESSAGE =
+  'Pi verification is required to sign up. Please open PiBazaar inside the Pi Browser to create your account.'
+
 interface AuthContextValue {
   user: SelfUser | null
   isAuthenticated: boolean
   isLoading: boolean
   authError: string | null
   clearError: () => void
-  signup: (body: SignupBody) => Promise<SelfUser>
+  signup: (body: Pick<SignupBody, 'username' | 'password'>) => Promise<SelfUser>
   login: (body: LoginBody) => Promise<SelfUser>
   loginWithPi: () => Promise<{ user: SelfUser; isNewUser: boolean }>
   logout: () => void
@@ -137,10 +140,37 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
   }, [refresh])
 
   const signup = useCallback(
-    async (body: SignupBody) => {
+    async (body: Pick<SignupBody, 'username' | 'password'>) => {
       setAuthError(null)
+      // Pi gate: only verified Pioneers can create an account. Obtain a Pi
+      // identity token in the background (form stays username + password only)
+      // and submit it; the backend verifies it before creating the account.
+      if (typeof window === 'undefined' || !initPiSdk() || !window.Pi) {
+        const message = PI_SIGNUP_REQUIRED_MESSAGE
+        setAuthError(message)
+        throw new Error(message)
+      }
+
+      let piAuth: PiAuthResultLite
       try {
-        const { token, user } = await authApi.signup(body)
+        piAuth = (await window.Pi.authenticate(
+          ['username', 'payments', 'wallet_address'],
+          () => {},
+        )) as PiAuthResultLite
+        if (!piAuth?.accessToken) throw new Error('Pi verification was cancelled.')
+      } catch (err) {
+        const message = messageFromError(err, 'Pi verification was cancelled or failed.')
+        setAuthError(message)
+        throw new Error(message)
+      }
+
+      try {
+        const { token, user } = await authApi.signup({
+          username: body.username,
+          password: body.password,
+          accessToken: piAuth.accessToken,
+          walletAddress: piAuth.user?.wallet_address,
+        })
         setToken(token)
         queryClient.clear()
         setCurrentUser(user)

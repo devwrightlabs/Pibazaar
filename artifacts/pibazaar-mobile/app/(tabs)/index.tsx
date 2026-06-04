@@ -172,7 +172,7 @@ function ToggleBtn({
         },
       ]}
     >
-      <Feather name={icon} size={15} color={active ? "#000" : colors.mutedForeground} />
+      <Feather name={icon} size={18} color={active ? "#000" : colors.mutedForeground} />
       <Text
         style={[
           styles.toggleText,
@@ -319,10 +319,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
+    gap: 8,
+    paddingVertical: 13,
+    minHeight: 48,
   },
-  toggleText: { fontSize: 13, fontWeight: "700" },
+  toggleText: { fontSize: 15, fontWeight: "700" },
   grid: { padding: 12, gap: 12 },
   row: { gap: 12 },
   sectionLabel: {

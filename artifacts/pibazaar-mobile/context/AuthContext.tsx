@@ -46,7 +46,7 @@ interface AuthContextValue {
   isLoading: boolean;
   authError: string | null;
   clearError: () => void;
-  signup: (body: SignupBody) => Promise<void>;
+  signup: (body: Pick<SignupBody, "username" | "password">) => Promise<void>;
   login: (body: LoginBody) => Promise<void>;
   /** Triggers the Pi SDK flow; throws a friendly error outside the Pi Browser. */
   loginWithPi: () => Promise<void>;
@@ -67,12 +67,15 @@ interface AuthContextValue {
 const PI_BROWSER_REQUIRED =
   "Pi login is only available inside the Pi Browser. Open PiBazaar in your Pi Browser, or sign in with a username and password.";
 
+const PI_SIGNUP_REQUIRED =
+  "Pi verification is required to sign up. Open PiBazaar in the Pi Browser to create your account.";
+
 // Minimal shape of the Pi SDK we rely on (only present in the Pi Browser).
 type PiSdk = {
   authenticate: (
     scopes: string[],
     onIncompletePaymentFound?: (payment: unknown) => void,
-  ) => Promise<{ accessToken: string }>;
+  ) => Promise<{ accessToken: string; user?: { wallet_address?: string } }>;
 };
 
 function getPiSdk(): PiSdk | null {
@@ -145,11 +148,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (body: SignupBody) => {
+    async (body: Pick<SignupBody, "username" | "password">) => {
       setIsLoading(true);
       setAuthError(null);
       try {
-        const { token, user: me } = await authApi.signup(body);
+        // Hard Pi gate: only verified Pioneers can create an account. Obtain a
+        // Pi identity token first; the backend re-verifies it before creating
+        // the account. The Pi SDK only exists inside the Pi Browser, so signup
+        // is intentionally impossible elsewhere.
+        const pi = getPiSdk();
+        if (!pi) throw new Error(PI_SIGNUP_REQUIRED);
+        const piAuth = await pi.authenticate([
+          "username",
+          "payments",
+          "wallet_address",
+        ]);
+        if (!piAuth?.accessToken) throw new Error(PI_SIGNUP_REQUIRED);
+
+        const { token, user: me } = await authApi.signup({
+          username: body.username,
+          password: body.password,
+          accessToken: piAuth.accessToken,
+          walletAddress: piAuth.user?.wallet_address,
+        });
         await setToken(token);
         setUser(me);
         queryClient.clear();

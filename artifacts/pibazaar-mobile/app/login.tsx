@@ -41,7 +41,6 @@ export default function LoginScreen() {
     login,
     signup,
     loginWithPi,
-    verifyPioneer,
     acceptToken,
     authError,
     clearError,
@@ -78,15 +77,10 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       if (mode === "signup") {
+        // Signup is Pi-gated: this runs the Pi SDK handshake and only succeeds
+        // for a verified Pioneer inside the Pi Browser. authError surfaces the
+        // "open in Pi Browser" message inline if verification is unavailable.
         await signup({ username: username.trim(), password });
-        // Cleanly verify the new user is a Pioneer via the Pi SDK. Outside the
-        // Pi Browser this resolves to false and never blocks account creation.
-        const verified = await verifyPioneer();
-        if (!verified) {
-          setPiNotice(
-            "Account created. Open PiBazaar in the Pi Browser to verify your Pioneer status and unlock Pi payments.",
-          );
-        }
       } else {
         await login({ username: username.trim(), password });
       }

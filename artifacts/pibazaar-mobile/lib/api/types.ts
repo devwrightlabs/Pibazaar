@@ -214,7 +214,9 @@ export interface DashboardSummary {
 export interface SignupBody {
   username: string
   password: string
-  email?: string
+  /** Pi SDK access token — verified server-side to gate signup to real Pioneers. */
+  accessToken: string
+  walletAddress?: string
 }
 
 export interface LoginBody {

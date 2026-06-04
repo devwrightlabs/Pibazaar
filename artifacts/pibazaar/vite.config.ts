@@ -63,6 +63,12 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Allow the app to be framed inside the Pi Browser sandbox. Vite does not
+    // emit X-Frame-Options, so a frame-ancestors CSP is all that is required.
+    headers: {
+      "Content-Security-Policy":
+        "frame-ancestors 'self' https://*.minepi.com https://*.pi https://*.replit.app https://*.replit.dev",
+    },
     fs: {
       strict: true,
     },
@@ -79,5 +85,9 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    headers: {
+      "Content-Security-Policy":
+        "frame-ancestors 'self' https://*.minepi.com https://*.pi https://*.replit.app https://*.replit.dev",
+    },
   },
 });

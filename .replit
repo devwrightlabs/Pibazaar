@@ -67,5 +67,12 @@ externalPort = 80
 
 [userenv.shared]
 
+[userenv.production]
+APP_ENV = "production"
+CORS_ORIGINS = "https://P2PbazaarMarketplace.replit.app"
+
+[userenv.development]
+APP_ENV = "development"
+
 [nix]
 channel = "stable-25_05"

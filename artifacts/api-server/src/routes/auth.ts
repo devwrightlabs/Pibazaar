@@ -47,8 +47,15 @@ async function generateUniqueUsername(base: string): Promise<string> {
   return `${clean}_${Date.now()}`;
 }
 
-// ─── Manual Sign Up (step 1: no Pi SDK involved) ──────────────────────────────
-
+// ─── Sign Up (Pi-gated: real Pioneer required) ────────────────────────────────
+//
+// The user-facing form collects only a username + password. The client also
+// runs the Pi SDK in the background (window.Pi.authenticate) and submits the
+// resulting access token. We verify that token server-to-server against the Pi
+// Platform BEFORE creating the account, so only authenticated Pioneers can
+// register. (Note: Pi's public /v2/me endpoint exposes uid + username only — it
+// does not return a KYC boolean — so "verified Pioneer" here means a valid,
+// Pi-issued identity token. This is the strongest gate the public API allows.)
 const signupSchema = z.object({
   username: z
     .string()
@@ -56,7 +63,8 @@ const signupSchema = z.object({
     .max(30)
     .regex(/^[a-zA-Z0-9_.]+$/, "Use letters, numbers, _ or ."),
   password: z.string().min(8).max(128),
-  email: z.string().email().optional(),
+  accessToken: z.string().min(1),
+  walletAddress: z.string().optional(),
 });
 
 router.post(
@@ -67,7 +75,21 @@ router.post(
     if (!parsed.success) {
       throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid input");
     }
-    const { username, password, email } = parsed.data;
+    const { username, password, accessToken, walletAddress } = parsed.data;
+
+    // Pi identity gate — must pass before any account is created.
+    let piUser;
+    try {
+      piUser = await verifyPiToken(accessToken);
+    } catch (err) {
+      if (err instanceof PiApiError) {
+        throw new HttpError(
+          403,
+          "Pi verification failed. Open PiBazaar in the Pi Browser to sign up.",
+        );
+      }
+      throw err;
+    }
 
     const [existing] = await db
       .select({ id: users.id })
@@ -76,13 +98,43 @@ router.post(
       .limit(1);
     if (existing) throw new HttpError(409, "Username is already taken");
 
-    const passwordHash = await hashPassword(password);
-    const [user] = await db
-      .insert(users)
-      .values({ username, passwordHash, email: email ?? null })
-      .returning();
+    // This Pi identity must not already own an account.
+    const [byPiUid] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.piUid, piUser.uid))
+      .limit(1);
+    if (byPiUid) {
+      throw new HttpError(
+        409,
+        "This Pi account already has a PiBazaar profile. Please log in instead.",
+      );
+    }
 
-    res.status(201).json({ token: tokenFor(user), user: serializeSelf(user) });
+    const passwordHash = await hashPassword(password);
+    try {
+      const [user] = await db
+        .insert(users)
+        .values({
+          username,
+          passwordHash,
+          piUid: piUser.uid,
+          walletAddress: walletAddress ?? null,
+          piWalletAddress: walletAddress ?? null,
+          isVerified: true,
+        })
+        .returning();
+
+      res.status(201).json({ token: tokenFor(user), user: serializeSelf(user) });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new HttpError(
+          409,
+          "That Pi account already has a profile. Please log in instead.",
+        );
+      }
+      throw err;
+    }
   }),
 );
 

@@ -3,3 +3,4 @@
 - [api-server stack](api-server-stack.md) — PiBazaar backend: Express + Drizzle + Replit Postgres, esbuild bundle (no typecheck at runtime), contract in artifacts/api-server/API_CONTRACT.md.
 - [TS project refs stale .d.ts](ts-project-references-stale-dts.md) — api-server reads lib/db's emitted .d.ts, not src; after schema edits rebuild with `tsc -b lib/db --force`, deleting tsbuildinfo isn't enough.
 - [PiBazaar web migration](pibazaar-migration.md) — web is fully off Supabase onto api-server typed client (JWT `pibazaar-token`, camelCase); build needs `PORT`+`BASE_PATH`; conversations use `unread`/`otherUser`; 2% fee paid by seller on release.
+- [Pi signup hard gate](pi-auth-gate.md) — signup requires a Pi access token verified server-side (real Pioneer); Pi Browser framing needs CSP frame-ancestors + no X-Frame-Options; prod CORS fails fast if CORS_ORIGINS empty.
