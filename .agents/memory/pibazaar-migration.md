@@ -1,59 +1,47 @@
 ---
 name: PiBazaar Migration
-description: Documents key decisions and patterns from migrating PiBazaar from Next.js/Vercel to Replit pnpm_workspace (Vite + wouter).
+description: Durable architecture + business-rule decisions for PiBazaar (web Vite+wouter, Expo mobile, Express api-server). Mechanics are derivable from code — only non-obvious decisions kept here.
 ---
 
-# PiBazaar: Next.js → Vite Migration Decisions
+# PiBazaar durable decisions
 
-## Routing
-- Replaced `next/navigation` (`useRouter`, `useParams`, `useSearchParams`) with wouter equivalents.
-- `useParams<{ id: string }>()` for dynamic segments; `useSearch()` + `new URLSearchParams()` for query strings.
-- Removed all `async function Page()` server component patterns — converted to `useEffect`-based fetching.
-
-## Server-only files
-Files that imported `next/server` or `next/headers` were stubbed to `export {}`:
-- `src/lib/authHelper.ts`, `src/lib/cacheHeaders.ts`, `src/lib/rateLimit.ts`, `src/lib/supabase-server.ts`
-- `src/middleware.ts`, `src/actions/chat.ts` (replaced with client `fetch`)
-
-## Env vars
-- `NEXT_PUBLIC_SUPABASE_*` → `VITE_SUPABASE_*` (already done in `src/lib/env.ts`)
-- API routes excluded from tsconfig via `"src/app/api/**/*"` in exclude array
-
-## Duplicate GoTrueClient
-- `src/lib/supabase.ts` creates its own client; fixed to call `getSupabaseClient()` from `src/lib/supabaseClient.ts` singleton.
-
-## API Proxy
-- Vite `server.proxy` configured to forward `/api/*` → `http://localhost:8080` (api-server port), with `ws: true` for the realtime WebSocket bridge (`/api/ws?token=`).
-
-## Supabase fully removed (web)
-- The web app no longer uses Supabase at all. All server state goes through the self-contained typed client in `src/lib/api/{types,client,hooks}.ts` (Bearer JWT in localStorage `pibazaar-token`, all shapes camelCase, money fields are numbers). Realtime via `src/lib/realtime.ts` + `useRealtimeSync`. The old `src/lib/supabase*`, `env.ts`, `storage.ts`, `database.types.ts`, and old snake_case `types.ts` were deleted.
-- **Why:** auth + data now owned by api-server (`API_CONTRACT.md`); reintroducing Supabase would split the source of truth.
-
-## Conversations list shape (gotcha)
-- `GET /conversations` returns per-row `{ id, listingId, listingTitle, lastMessage, lastMessageAt, createdAt, unread, otherUser }` — NO `participantA`/`participantB`, and the unread field is `unread` (not `unreadCount`). The other party is pre-enriched as `otherUser`, so the client never needs to derive it from participant ids.
+## Source of truth: api-server, two thin clients
+- The web app is fully off Supabase. All server state goes through a self-contained
+  typed client (`src/lib/api/`), Bearer JWT in localStorage `pibazaar-token`, all
+  shapes camelCase, money fields are numbers. The Expo app mirrors the *same*
+  hand-rolled contract — it is NOT codegen'd (the OpenAPI spec only covers
+  `/healthz`). `artifacts/api-server/API_CONTRACT.md` is the single source of truth.
+- **Why:** auth + data are owned by api-server; reintroducing Supabase or codegen
+  would split the source of truth and let web/mobile drift.
 
 ## Escrow fee model (business rule)
-- Buyer pays the item price (`escrow.amountPi`) into escrow. The 2% platform fee (`platformFeeRate=0.02`) is deducted from the SELLER's payout on release — it is NOT added to the buyer's total. Checkout "You pay" must equal `amountPi`.
-
-## Web build env (quirk)
-- The pibazaar web build/dev throws unless `PORT` and `BASE_PATH` env vars are set (vite config reads them eagerly). Build locally with `PORT=5000 BASE_PATH=/ NODE_ENV=production pnpm build`.
-
-## Mobile (Expo) shares the web's contract, not its codegen
-- The Expo app mirrors the web's hand-rolled typed client; it is NOT generated from the repo's OpenAPI spec (that spec only covers `/healthz`). `API_CONTRACT.md` is the single source of truth for endpoints — don't try to codegen the mobile client.
-- **Why:** auth + data are owned by api-server; one contract, two thin clients keeps web and mobile in lockstep.
-
-## Pi payments only work inside the Pi Browser
-- Funding an escrow (`pending → funded`) needs a real Pi payment bound to the escrow: the buyer's payment must carry the escrow id and amount, and the server rejects (400) any payment whose amount/escrow-id don't match. `window.Pi` exists only in the Pi Browser, so mobile must feature-detect and degrade gracefully on native/Expo Go rather than assume the SDK is present.
+- Buyer pays the item price (`escrow.amountPi`) into escrow. The 2% platform fee
+  (`platformFeeRate=0.02`) is deducted from the SELLER's payout on release — NOT
+  added to the buyer's total. Checkout "You pay" must equal `amountPi`.
 
 ## Escrow lifecycle gating must mirror the server
-- The server is authoritative on state transitions; the UI must only offer actions the server will accept, or buttons 400. Durable rules: cancel is allowed ONLY while unfunded (`pending`); buyer release (`confirm`) is allowed at `funded|shipped|delivered` but UI should require shipping orders to reach `shipped/delivered` first while digital/other release at `funded`; local-meetup uses a separate meetup-code release, so exclude it from the generic confirm button.
-- **Why:** keeping web and mobile gating identical to the server prevents one client drifting into states the backend rejects.
+- The server is authoritative on state transitions; the UI must only offer actions
+  the server will accept. Durable rules: cancel ONLY while unfunded (`pending`);
+  buyer release (`confirm`) at `funded|shipped|delivered`, but UI should require
+  shipping orders to reach `shipped/delivered` first while digital/other release at
+  `funded`; local-meetup uses a separate meetup-code release — exclude it from the
+  generic confirm button.
+- **Why:** identical web/mobile/server gating prevents a client drifting into
+  states the backend rejects (400s).
 
-## Image components
-- All `next/image` `<Image fill />` replaced with `<img className="w-full h-full object-cover" />`.
+## Conversations list shape (gotcha)
+- `GET /conversations` returns per-row `{ id, listingId, listingTitle, lastMessage,
+  lastMessageAt, createdAt, unread, otherUser }` — NO `participantA`/`participantB`;
+  unread field is `unread` (not `unreadCount`); the other party is pre-enriched as
+  `otherUser`, so the client never derives it from participant ids.
 
-## Button component
-- Added `'icon'` to both `variant` and `size` unions (used by shadcn-style sidebar, calendar, carousel, pagination).
-- Added `buttonVariants()` compatibility shim for shadcn components that import it.
+## Pi payments only work inside the Pi Browser
+- Funding an escrow (`pending → funded`) needs a real Pi payment carrying the escrow
+  id + amount; the server rejects (400) any payment whose amount/escrow-id mismatch.
+  `window.Pi` exists only in the Pi Browser, so mobile must feature-detect and
+  degrade gracefully on native/Expo Go rather than assume the SDK is present.
 
-**Why:** The original app mixed Next.js server and client patterns; Vite only runs client-side code.
+## Web build env (quirk)
+- The pibazaar web build/dev throws unless `PORT` and `BASE_PATH` are set (vite
+  config reads them eagerly). Build with `PORT=5000 BASE_PATH=/ NODE_ENV=production
+  pnpm build`.
