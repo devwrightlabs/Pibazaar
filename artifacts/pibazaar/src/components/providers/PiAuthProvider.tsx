@@ -26,9 +26,6 @@ import { initPiSdk } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
 import type { SelfUser } from '@/lib/api/types'
 
-const PI_BROWSER_REQUIRED_MESSAGE =
-  'Please open PiBazaar inside the Pi Browser to log in with Pi.'
-
 /**
  * Required by `Pi.authenticate(scopes, onIncompletePaymentFound)`. The Pi SDK
  * invokes this when a previously-created payment for this user was never
@@ -159,13 +156,11 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         // or report a non-fatal status, and blocking on it wrongly stops real
         // Pioneers from signing in. The reliable signal that we're inside the Pi
         // Browser is simply that `window.Pi` has been injected. If it's there we
-        // trigger authentication directly; only when it's genuinely absent (i.e.
-        // not the Pi Browser) do we bail out — silently for the auto-trigger.
+        // trigger authentication directly; if it's genuinely absent (i.e. not the
+        // Pi Browser) we stop quietly — no "open in Pi Browser" banner is shown.
         if (typeof window !== 'undefined') await initPiSdk()
         if (typeof window === 'undefined' || !window.Pi) {
-          if (silent) return null
-          setAuthError(PI_BROWSER_REQUIRED_MESSAGE)
-          throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
+          return null
         }
 
         // Native Pi SDK authentication — `username` scope only — executed inside
@@ -214,7 +209,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
   const loginWithPi = useCallback(async () => {
     const result = await runPiLogin()
-    if (!result) throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
+    if (!result) throw new Error('Pi login is unavailable.')
     return result
   }, [runPiLogin])
 
