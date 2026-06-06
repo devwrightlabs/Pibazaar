@@ -48,6 +48,15 @@ verification.
 **How to apply:** Any new signup surface must obtain + forward a Pi access token.
 Server is the source of truth — never trust a client "isVerified" flag.
 
+**App Studio "We Couldn't Verify Your App" + old UI is NOT a code bug.** If the
+Pi App Studio "Verifying Your App" preview shows stale UI (e.g. the long-removed
+username/password "Create account" form) and/or says it can't detect a sign-in,
+the cause is the **URL registered in the Pi Developer Portal pointing at an old
+build** — verify the live production bundle first (curl the prod URL, grep the
+`/assets/index-*.js` bundle for removed strings). The Replit production
+deployment is the source of truth; fix is to repoint the Developer Portal app
+URL to the current deployment, not to change code.
+
 # Pi Browser framing + CORS
 
 - The app is embedded in the Pi Browser sandbox, so it must be frameable: emit
