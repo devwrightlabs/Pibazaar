@@ -154,11 +154,15 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       const attempt = (async () => {
         if (!silent) setAuthError(null)
 
-        // Pi authentication runs exclusively inside the Pi Browser, where
-        // window.Pi is injected. Anywhere else there is nothing to authenticate
-        // against, so we bail out (silently for the auto-trigger).
-        const ready = typeof window !== 'undefined' ? await initPiSdk() : false
-        if (!ready || !window.Pi) {
+        // Initialise the Pi SDK when present, but do NOT gate the login attempt
+        // on init reporting success — some Pi Browser builds resolve init lazily
+        // or report a non-fatal status, and blocking on it wrongly stops real
+        // Pioneers from signing in. The reliable signal that we're inside the Pi
+        // Browser is simply that `window.Pi` has been injected. If it's there we
+        // trigger authentication directly; only when it's genuinely absent (i.e.
+        // not the Pi Browser) do we bail out — silently for the auto-trigger.
+        if (typeof window !== 'undefined') await initPiSdk()
+        if (typeof window === 'undefined' || !window.Pi) {
           if (silent) return null
           setAuthError(PI_BROWSER_REQUIRED_MESSAGE)
           throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
