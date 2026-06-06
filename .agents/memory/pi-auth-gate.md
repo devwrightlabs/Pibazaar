@@ -83,6 +83,22 @@ URL to the current deployment, not to change code.
 - Env stage is driven by `APP_ENV` (falls back to `NODE_ENV`): see `lib/env.ts`
   `APP_ENV`/`isProduction`/`CORS_ORIGINS`.
 
+# Pi SDK script URL (root cause of "Pi SDK not detected")
+
+- The Pi SDK MUST be loaded from `https://sdk.minepi.com/pi-sdk.js` (real JS,
+  ~1.1MB, `text/javascript`). The plausible-looking
+  `https://app-cdn.minepi.com/version/2.0/pi.js` is WRONG — it 200s but returns
+  an **HTML page** (`text/html`, ~1.5KB), which loads as a `<script>` but defines
+  nothing, so `window.Pi` is silently never set and login "fails to detect the SDK".
+  **Why:** the failure is invisible — script load succeeds (HTTP 200), there's no
+  console in the Pi Browser/Sandbox, and the price feature still works because it's
+  a plain REST `fetch` to `api.minepi.com` (no SDK), masking the real problem.
+  **How to apply:** if `window.Pi` is undefined, first `curl -I` the SDK URL and
+  confirm `content-type: text/javascript`. The `<script onerror>` in `index.html`
+  records hard load failures to `window.__PI_SDK_LOAD_ERROR__`; `pi-sdk.ts`
+  `waitForPiSdk()` polls for `window.Pi` (~4s) and `describePiSdkUnavailable()`
+  builds the user-facing diagnostic.
+
 # Pi SDK sandbox flag
 
 - `Pi.init({ sandbox })` is environment-specific and getting it wrong is silent:

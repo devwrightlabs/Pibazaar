@@ -3,6 +3,8 @@
 declare global {
   interface Window {
     Pi?: PiSDK
+    /** Set by the pi-sdk.js <script onerror> handler in index.html. */
+    __PI_SDK_LOAD_ERROR__?: string
   }
 }
 
@@ -70,6 +72,49 @@ function getPiSdk(): PiSDK | null {
     return null
   }
   return window.Pi
+}
+
+/**
+ * If the pi-sdk.js <script> failed to load (bad URL, blocked, offline), the
+ * inline onerror handler in index.html records the reason here.
+ */
+export function getPiSdkLoadError(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.__PI_SDK_LOAD_ERROR__ ?? null
+}
+
+/**
+ * Wait for the Pi SDK (`window.Pi`) to appear, polling briefly. The SDK script
+ * is loaded synchronously in <head>, but on slow networks the React app can
+ * occasionally run first — poll for up to `timeoutMs` before giving up so a
+ * slow load is not mistaken for a missing SDK.
+ */
+export async function waitForPiSdk(timeoutMs = 4000): Promise<PiSDK | null> {
+  if (typeof window === 'undefined') return null
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    if (window.Pi) return window.Pi
+    // Stop early if the script tag itself reported a hard load failure.
+    if (getPiSdkLoadError()) return null
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return window.Pi ?? null
+}
+
+/**
+ * Human-readable diagnostic describing why the SDK is unavailable, including
+ * the load error (if any) and the resolved sandbox mode. Used by the login UI
+ * to surface what would otherwise be a silent failure.
+ */
+export function describePiSdkUnavailable(): string {
+  const loadError = getPiSdkLoadError()
+  if (loadError) {
+    return `${loadError}. Check your connection and reload, or open PiBazaar inside the Pi Browser.`
+  }
+  return (
+    'Pi SDK not detected (window.Pi is undefined). Open PiBazaar inside the ' +
+    'Pi Browser (or the Pi Sandbox) — Pi login is only available there.'
+  )
 }
 
 /** The `sandbox` value the SDK was last initialised with (null before init). */
@@ -174,7 +219,7 @@ function resolvePiSandboxMode(): boolean {
  *
  * Call this once on app startup (e.g. in a top-level layout or provider).
  * The `sandbox` flag controls whether the SDK operates in test mode.
- * The Pi SDK script (`https://app-cdn.minepi.com/version/2.0/pi.js`) must already be
+ * The Pi SDK script (`https://sdk.minepi.com/pi-sdk.js`) must already be
  * loaded via a `<script>` tag before calling this function.
  *
  * CRITICAL: `Pi.init()` is treated as a Promise and awaited fully — this MUST
@@ -184,11 +229,11 @@ function resolvePiSandboxMode(): boolean {
 export async function initPiSdk(): Promise<boolean> {
   if (piSdkInitialised) return true
   if (piInitPromise) return piInitPromise
-  if (!(typeof window !== 'undefined' && window.Pi)) {
-    console.warn('[pi-sdk] Pi SDK script is not loaded')
+  const pi = await waitForPiSdk()
+  if (!pi) {
+    console.warn('[pi-sdk] ' + describePiSdkUnavailable())
     return false
   }
-  const pi = window.Pi
 
   const sandbox = resolvePiSandboxMode()
   resolvedSandboxMode = sandbox

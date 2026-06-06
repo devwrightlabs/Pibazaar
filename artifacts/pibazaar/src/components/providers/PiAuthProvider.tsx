@@ -22,7 +22,12 @@ import { useLocation } from 'wouter'
 import { useQueryClient } from '@tanstack/react-query'
 import { authApi, setToken, getToken, ApiError } from '@/lib/api/client'
 import { useRealtimeSync } from '@/lib/api/hooks'
-import { initPiSdk, piDebugAlert, getResolvedSandboxMode } from '@/lib/pi-sdk'
+import {
+  initPiSdk,
+  piDebugAlert,
+  getResolvedSandboxMode,
+  describePiSdkUnavailable,
+} from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
 import type { SelfUser } from '@/lib/api/types'
 
@@ -180,11 +185,17 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         // If the SDK was never injected we are not inside the Pi Browser / Sandbox.
         // On a manual attempt this must be visible — otherwise the button looks dead.
         if (typeof window === 'undefined' || !window.Pi) {
+          const diagnostic = describePiSdkUnavailable()
           if (!silent) {
-            piDebugAlert('STOP: window.Pi is undefined — not running inside Pi Browser/Sandbox')
-            setAuthError(
-              'Pi SDK not detected. Open PiBazaar inside the Pi Browser (or the Pi Sandbox) to sign in.',
-            )
+            // Always surface this on a manual attempt (not gated behind pidebug):
+            // it is the actionable failure that otherwise makes the button look
+            // dead, and there is no dev console inside the Pi Browser/Sandbox.
+            try {
+              window.alert(`[PiBazaar] ${diagnostic}`)
+            } catch {
+              /* alert blocked */
+            }
+            setAuthError(diagnostic)
           }
           return null
         }
