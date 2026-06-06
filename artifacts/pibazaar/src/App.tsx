@@ -27,8 +27,10 @@ import ChatRoomPageV2 from "@/app/messages/[chatId]/page";
 import NotificationsPage from "@/app/notifications/page";
 import OrdersPage from "@/app/orders/page";
 import OrderDetailPage from "@/app/orders/[orderId]/page";
+import PrivacyPage from "@/app/privacy/page";
 import ProductDetailPage from "@/app/products/[id]/page";
 import ProfilePage from "@/app/profile/page";
+import TermsPage from "@/app/terms/page";
 import SettingsPage from "@/app/settings/page";
 import ShippingPage from "@/app/shipping/page";
 import EscrowPage from "@/app/transactions/escrow/[transactionId]/page";
@@ -58,8 +60,10 @@ function AppRoutes() {
         <Route path="/orders" component={OrdersPage} />
         <Route path="/orders/:orderId" component={OrderDetailPage} />
         <Route path="/products/:id" component={ProductDetailPage} />
+        <Route path="/privacy" component={PrivacyPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/terms" component={TermsPage} />
         <Route path="/shipping" component={ShippingPage} />
         <Route path="/transactions/escrow/:transactionId" component={EscrowPage} />
         <Route component={NotFound} />

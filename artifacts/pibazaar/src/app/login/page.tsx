@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { useLocation } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { useAuth } from '@/components/providers/PiAuthProvider'
 import { Button } from '@/components/ui/button'
 
@@ -85,7 +85,14 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs text-center text-muted-foreground">
-          By continuing, you agree to our Terms of Service and Privacy Policy
+          By continuing, you agree to our{' '}
+          <Link href="/terms" className="text-primary hover:underline">
+            Terms of Service
+          </Link>{' '}
+          and{' '}
+          <Link href="/privacy" className="text-primary hover:underline">
+            Privacy Policy
+          </Link>
         </p>
       </div>
     </main>
