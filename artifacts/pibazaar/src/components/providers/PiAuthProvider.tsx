@@ -15,6 +15,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useLocation } from 'wouter'
@@ -145,7 +146,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       // Pi gate: only verified Pioneers can create an account. Obtain a Pi
       // identity token in the background (form stays username + password only)
       // and submit it; the backend verifies it before creating the account.
-      if (typeof window === 'undefined' || !initPiSdk() || !window.Pi) {
+      if (typeof window === 'undefined' || !(await initPiSdk()) || !window.Pi) {
         const message = PI_SIGNUP_REQUIRED_MESSAGE
         setAuthError(message)
         throw new Error(message)
@@ -153,10 +154,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
       let piAuth: PiAuthResultLite
       try {
-        piAuth = (await window.Pi.authenticate(
-          ['username', 'payments', 'wallet_address'],
-          () => {},
-        )) as PiAuthResultLite
+        piAuth = (await window.Pi.authenticate(['username'], () => {})) as PiAuthResultLite
         if (!piAuth?.accessToken) throw new Error('Pi verification was cancelled.')
       } catch (err) {
         const message = messageFromError(err, 'Pi verification was cancelled or failed.')
@@ -202,45 +200,86 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
     [setCurrentUser, queryClient],
   )
 
+  // Shared Pi authentication routine used by both the manual "Log in with Pi"
+  // button and the automatic on-load trigger. Awaits Pi.init() fully, then
+  // authenticates with the `username` scope and exchanges the access token with
+  // the backend, which validates it via GET /v2/me before issuing our session.
+  // A single in-flight promise dedupes concurrent attempts (auto + manual).
+  const piLoginInFlight = useRef<
+    Promise<{ user: SelfUser; isNewUser: boolean } | null> | null
+  >(null)
+
+  const runPiLogin = useCallback(
+    (
+      { silent }: { silent?: boolean } = {},
+    ): Promise<{ user: SelfUser; isNewUser: boolean } | null> => {
+      if (piLoginInFlight.current) return piLoginInFlight.current
+
+      const attempt = (async () => {
+        if (!silent) setAuthError(null)
+
+        const ready = typeof window !== 'undefined' ? await initPiSdk() : false
+        if (!ready || !window.Pi) {
+          if (silent) return null
+          setAuthError(PI_BROWSER_REQUIRED_MESSAGE)
+          throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
+        }
+
+        let piAuth: PiAuthResultLite
+        try {
+          piAuth = (await window.Pi.authenticate(['username'], () => {})) as PiAuthResultLite
+          if (!piAuth?.accessToken) throw new Error('Pi authentication was cancelled.')
+        } catch (err) {
+          if (silent) return null
+          const message = messageFromError(err, 'Pi authentication was cancelled or failed.')
+          setAuthError(message)
+          throw new Error(message)
+        }
+
+        try {
+          // If already logged in (manual account), link Pi to it; otherwise log in / provision.
+          const linking = !!getToken()
+          const { token, user, isNewUser } = await authApi.pi(
+            { accessToken: piAuth.accessToken, walletAddress: piAuth.user?.wallet_address },
+            { link: linking },
+          )
+          setToken(token)
+          // Fresh login switches identity — drop cached data. Linking keeps the same user.
+          if (!linking) queryClient.clear()
+          setCurrentUser(user)
+          return { user, isNewUser: !!isNewUser }
+        } catch (err) {
+          if (silent) return null
+          const message = messageFromError(err, 'Could not log in with Pi. Please try again.')
+          setAuthError(message)
+          throw err
+        }
+      })()
+
+      piLoginInFlight.current = attempt
+      return attempt.finally(() => {
+        piLoginInFlight.current = null
+      })
+    },
+    [setCurrentUser, queryClient],
+  )
+
   const loginWithPi = useCallback(async () => {
-    setAuthError(null)
-    if (typeof window === 'undefined' || !initPiSdk() || !window.Pi) {
-      const message = PI_BROWSER_REQUIRED_MESSAGE
-      setAuthError(message)
-      throw new Error(message)
-    }
+    const result = await runPiLogin()
+    if (!result) throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
+    return result
+  }, [runPiLogin])
 
-    let piAuth: PiAuthResultLite
-    try {
-      piAuth = (await window.Pi.authenticate(
-        ['username', 'payments', 'wallet_address'],
-        () => {},
-      )) as PiAuthResultLite
-      if (!piAuth?.accessToken) throw new Error('Pi authentication was cancelled.')
-    } catch (err) {
-      const message = messageFromError(err, 'Pi authentication was cancelled or failed.')
-      setAuthError(message)
-      throw new Error(message)
-    }
-
-    try {
-      // If already logged in (manual account), link Pi to it; otherwise log in / provision.
-      const linking = !!getToken()
-      const { token, user, isNewUser } = await authApi.pi(
-        { accessToken: piAuth.accessToken, walletAddress: piAuth.user?.wallet_address },
-        { link: linking },
-      )
-      setToken(token)
-      // Fresh login switches identity — drop cached data. Linking keeps the same user.
-      if (!linking) queryClient.clear()
-      setCurrentUser(user)
-      return { user, isNewUser: !!isNewUser }
-    } catch (err) {
-      const message = messageFromError(err, 'Could not log in with Pi. Please try again.')
-      setAuthError(message)
-      throw err
-    }
-  }, [setCurrentUser, queryClient])
+  // Automatically trigger Pi authentication on app load: once the session has
+  // been restored, if the user is not already authenticated and the Pi SDK is
+  // present (running inside the Pi Browser), attempt a silent Pi login.
+  const autoPiAttempted = useRef(false)
+  useEffect(() => {
+    if (isLoading || currentUser || autoPiAttempted.current) return
+    if (typeof window === 'undefined' || !window.Pi) return
+    autoPiAttempted.current = true
+    void runPiLogin({ silent: true })
+  }, [isLoading, currentUser, runPiLogin])
 
   const logout = useCallback(() => {
     authApi.logout().catch(() => {})

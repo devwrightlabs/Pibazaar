@@ -41,8 +41,8 @@ export default function ConnectPiWalletToPay({
   const handleConnect = async () => {
     setState({ status: 'connecting', walletAddress: null, errorMessage: null })
 
-    // Ensure the SDK is initialised before attempting authentication
-    const initialised = initPiSdk()
+    // Ensure the SDK is initialised (await the init Promise) before authentication
+    const initialised = await initPiSdk()
     if (!initialised) {
       setState({
         status: 'error',

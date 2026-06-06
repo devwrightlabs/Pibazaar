@@ -7,7 +7,9 @@ declare global {
 }
 
 interface PiSDK {
-  init: (config: { version: string; sandbox: boolean }) => void
+  // Pi SDK 2.0 returns a Promise from init(); older builds returned void. Treat
+  // it as a Promise and await it fully before any authenticate()/payment call.
+  init: (config: { version: string; sandbox: boolean }) => Promise<void> | void
   authenticate: (scopes: string[], onIncompletePaymentFound: (payment: PiPayment) => void) => Promise<PiAuthResult>
   createPayment: (paymentData: PiPaymentData, callbacks: PiPaymentCallbacks) => void
   openShareDialog: (title: string, message: string) => void
@@ -60,6 +62,7 @@ interface PiPaymentCallbacks {
 // ─── SDK initialization ───────────────────────────────────────────────────────
 
 let piSdkInitialised = false
+let piInitPromise: Promise<boolean> | null = null
 
 function getPiSdk(): PiSDK | null {
   if (!(typeof window !== 'undefined' && window.Pi)) {
@@ -76,34 +79,43 @@ function getPiSdk(): PiSDK | null {
  * The Pi SDK script (`https://app-cdn.minepi.com/version/2.0/pi.js`) must already be
  * loaded via a `<script>` tag before calling this function.
  *
- * CRITICAL: This function explicitly calls window.Pi.init() with the proper
- * configuration. This MUST happen before any authentication or wallet operations.
+ * CRITICAL: `Pi.init()` is treated as a Promise and awaited fully — this MUST
+ * resolve before any authentication or wallet operation. Concurrent callers
+ * share a single in-flight init Promise.
  */
-export function initPiSdk(): boolean {
+export async function initPiSdk(): Promise<boolean> {
   if (piSdkInitialised) return true
+  if (piInitPromise) return piInitPromise
   if (!(typeof window !== 'undefined' && window.Pi)) {
     console.warn('[pi-sdk] Pi SDK script is not loaded')
     return false
   }
   const pi = window.Pi
 
-  try {
-    // Explicitly initialize the Pi SDK in production mode
-    pi.init({ version: '2.0', sandbox: false })
-    piSdkInitialised = true
-    console.info('[pi-sdk] Initialized successfully (sandbox: false)')
-    return true
-  } catch (error) {
-    console.error('[pi-sdk] Initialization failed:', error)
-    return false
-  }
+  piInitPromise = (async () => {
+    try {
+      // Pi.init() returns a Promise in SDK 2.0 — await it fully before auth.
+      await pi.init({ version: '2.0', sandbox: false })
+      piSdkInitialised = true
+      console.info('[pi-sdk] Initialized successfully (sandbox: false)')
+      return true
+    } catch (error) {
+      console.error('[pi-sdk] Initialization failed:', error)
+      piInitPromise = null
+      return false
+    }
+  })()
+
+  return piInitPromise
 }
 
 // ─── Authentication ───────────────────────────────────────────────────────────
 
 export async function authenticateWithPi(): Promise<PiAuthResult | null> {
   try {
-    if (!(typeof window !== 'undefined' && window.Pi)) {
+    // Await Pi.init() fully before authenticate().
+    const ready = await initPiSdk()
+    if (!ready || !(typeof window !== 'undefined' && window.Pi)) {
       console.error('[pi-sdk] Wallet Connection Failed: Pi SDK not available')
       return null
     }
