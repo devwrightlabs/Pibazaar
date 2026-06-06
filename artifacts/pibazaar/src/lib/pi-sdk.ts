@@ -63,12 +63,57 @@ interface PiPaymentCallbacks {
 
 let piSdkInitialised = false
 let piInitPromise: Promise<boolean> | null = null
+let resolvedSandboxMode: boolean | null = null
 
 function getPiSdk(): PiSDK | null {
   if (!(typeof window !== 'undefined' && window.Pi)) {
     return null
   }
   return window.Pi
+}
+
+/** The `sandbox` value the SDK was last initialised with (null before init). */
+export function getResolvedSandboxMode(): boolean | null {
+  return resolvedSandboxMode
+}
+
+// ─── Visual debugging ─────────────────────────────────────────────────────────
+// The Pi Sandbox and Pi Browser have no dev console, so we expose optional
+// `alert()`-based step tracing for the auth flow. Enable it by loading the app
+// with `?pidebug=1` (sticky for the rest of the session) or by setting
+// localStorage['pi-debug']='1' / VITE_PI_DEBUG=true. Disable with `?pidebug=0`.
+
+export function isPiDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const flag = new URLSearchParams(window.location.search).get('pidebug')
+    if (flag === '1') {
+      window.localStorage?.setItem('pi-debug', '1')
+      return true
+    }
+    if (flag === '0') {
+      window.localStorage?.removeItem('pi-debug')
+      return false
+    }
+  } catch {
+    /* URL/localStorage unavailable */
+  }
+  try {
+    if (window.localStorage?.getItem('pi-debug') === '1') return true
+  } catch {
+    /* localStorage unavailable */
+  }
+  return import.meta.env.VITE_PI_DEBUG === 'true'
+}
+
+/** Show a debug `alert()` only when Pi debug mode is enabled. */
+export function piDebugAlert(message: string): void {
+  if (typeof window === 'undefined' || !isPiDebugEnabled()) return
+  try {
+    window.alert(`[PiBazaar debug] ${message}`)
+  } catch {
+    /* alert blocked */
+  }
 }
 
 /**
@@ -146,6 +191,7 @@ export async function initPiSdk(): Promise<boolean> {
   const pi = window.Pi
 
   const sandbox = resolvePiSandboxMode()
+  resolvedSandboxMode = sandbox
 
   piInitPromise = (async () => {
     try {

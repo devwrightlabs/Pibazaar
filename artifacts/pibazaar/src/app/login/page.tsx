@@ -12,11 +12,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import { useAuth } from '@/components/providers/PiAuthProvider'
+import { piDebugAlert } from '@/lib/pi-sdk'
 import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   const [, navigate] = useLocation()
-  const { loginWithPi, authError, isAuthenticated, isLoading } = useAuth()
+  const { loginWithPi, authError, isAuthenticated } = useAuth()
   const [piLoading, setPiLoading] = useState(false)
 
   // Already signed in → bounce home.
@@ -25,13 +26,19 @@ export default function LoginPage() {
   }, [isAuthenticated, navigate])
 
   const handlePiLogin = async () => {
-    if (piLoading) return
+    piDebugAlert('0/5 Button clicked')
+    if (piLoading) {
+      piDebugAlert('Ignored: a login attempt is already running')
+      return
+    }
     setPiLoading(true)
     try {
       await loginWithPi()
       navigate('/')
-    } catch {
-      /* error surfaced via authError */
+    } catch (err) {
+      // The detailed message is already shown via authError; this alert is the
+      // visual-debug catch-all for environments without a dev console.
+      piDebugAlert(`Login failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setPiLoading(false)
     }
@@ -71,12 +78,15 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Disabled state is tied ONLY to an in-flight login attempt — never to
+              session-restore loading, so a stalled GET /auth/me can't leave the
+              button permanently dead. */}
           <Button
             type="button"
             size="lg"
             onClick={() => void handlePiLogin()}
-            loading={piLoading || isLoading}
-            disabled={piLoading || isLoading}
+            loading={piLoading}
+            disabled={piLoading}
             className="w-full gap-2"
           >
             <span aria-hidden="true">π</span>

@@ -21,13 +21,22 @@ from the web client — `PiAuthProvider` now exposes only `loginWithPi`.
 an `onIncompletePaymentFound` callback (module-level, console.warn) — the Pi SDK
 requires it as the 2nd arg even for a username-only login.
 
-**Do not surface the Pi SDK's raw `authenticate` failure text in the UI.** When
-`Pi.authenticate` throws (most notably "We couldn't verify your app" — which
-means the app/domain is not verified in the **Pi Developer Portal**, an external
-config issue, NOT a code bug), the handler logs to console and returns null with
-no `authError` banner. Genuine backend token-exchange errors and the "open in
-Pi Browser" guard message are still surfaced; the SDK's own verification text is
-intentionally swallowed because it is confusing and unactionable for end users.
+**The MANUAL login path surfaces errors; the SILENT auto-login path stays quiet.**
+Every failure branch in `runPiLogin` is gated on `!silent`: a manual click sets a
+visible `authError` for missing `window.Pi`, an `authenticate` throw (incl. "We
+couldn't verify your app" = app/domain not verified in the **Pi Developer Portal**,
+an external config issue NOT a code bug), a missing access token, and backend
+token-exchange failure. The silent on-load attempt sets no UI/error state.
+**Why:** an earlier design swallowed *all* `authenticate` failures, so a failing
+login in the Pi Sandbox (which has no dev console) made the button look "completely
+unresponsive" — no feedback at all. Surfacing on the manual path is the fix.
+**Visual debugging:** `piDebugAlert()` (in `pi-sdk.ts`) shows `alert()` step traces
+for the console-less Sandbox/Browser, gated behind `?pidebug=1` (sticky via
+localStorage `pi-debug`) / `VITE_PI_DEBUG=true`; never fires for normal users.
+**Login button disabled-state contract:** gate login CTAs on the *in-flight* login
+state (`isLoggingIn` / local `piLoading`), NEVER on session-restore `isLoading` —
+a stalled `GET /auth/me` must not be able to permanently disable the button. Use
+`isLoading` only for identity visuals (avatar skeleton).
 
 **Init + auto-login:** `Pi.init()` is treated as a Promise and awaited fully
 (shared in-flight promise in `pi-sdk.ts`) before any `authenticate()`. Web auth

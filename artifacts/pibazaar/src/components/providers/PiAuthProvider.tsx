@@ -22,7 +22,7 @@ import { useLocation } from 'wouter'
 import { useQueryClient } from '@tanstack/react-query'
 import { authApi, setToken, getToken, ApiError } from '@/lib/api/client'
 import { useRealtimeSync } from '@/lib/api/hooks'
-import { initPiSdk } from '@/lib/pi-sdk'
+import { initPiSdk, piDebugAlert, getResolvedSandboxMode } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
 import type { SelfUser } from '@/lib/api/types'
 
@@ -41,6 +41,7 @@ interface AuthContextValue {
   user: SelfUser | null
   isAuthenticated: boolean
   isLoading: boolean
+  isLoggingIn: boolean
   authError: string | null
   clearError: () => void
   loginWithPi: () => Promise<{ user: SelfUser; isNewUser: boolean }>
@@ -52,6 +53,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  isLoggingIn: false,
   authError: null,
   clearError: () => {},
   loginWithPi: async () => {
@@ -71,13 +73,20 @@ export function usePiAuth() {
   return {
     ...ctx,
     handleLogin: async () => {
+      piDebugAlert('0/5 Button clicked (home)')
       try {
         await ctx.loginWithPi()
-      } catch {
-        /* error surfaced via authError */
+      } catch (err) {
+        // Detailed message already surfaced via authError; this is the
+        // console-less visual-debug catch-all.
+        piDebugAlert(`Login failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     },
+    // Session-restore loading (use for skeletons/avatar).
     loading: ctx.isLoading,
+    // In-flight manual login attempt (use to gate the login button so a stalled
+    // session restore can never leave it permanently disabled).
+    loggingIn: ctx.isLoggingIn,
     error: ctx.authError,
   }
 }
@@ -98,6 +107,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
   const [, navigate] = useLocation()
   const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
   // Keep React Query caches live over the WebSocket while authenticated.
@@ -150,34 +160,62 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
       const attempt = (async () => {
         if (!silent) setAuthError(null)
+        if (!silent) piDebugAlert('1/5 Login started')
 
         // Initialise the Pi SDK when present, but do NOT gate the login attempt
         // on init reporting success — some Pi Browser builds resolve init lazily
         // or report a non-fatal status, and blocking on it wrongly stops real
         // Pioneers from signing in. The reliable signal that we're inside the Pi
-        // Browser is simply that `window.Pi` has been injected. If it's there we
-        // trigger authentication directly; if it's genuinely absent (i.e. not the
-        // Pi Browser) we stop quietly — no "open in Pi Browser" banner is shown.
-        if (typeof window !== 'undefined') await initPiSdk()
+        // Browser is simply that `window.Pi` has been injected.
+        if (typeof window !== 'undefined') {
+          const ready = await initPiSdk()
+          if (!silent) {
+            piDebugAlert(
+              `2/5 Pi.init ready=${ready}, sandbox=${getResolvedSandboxMode()}, ` +
+                `window.Pi present=${!!window.Pi}`,
+            )
+          }
+        }
+
+        // If the SDK was never injected we are not inside the Pi Browser / Sandbox.
+        // On a manual attempt this must be visible — otherwise the button looks dead.
         if (typeof window === 'undefined' || !window.Pi) {
+          if (!silent) {
+            piDebugAlert('STOP: window.Pi is undefined — not running inside Pi Browser/Sandbox')
+            setAuthError(
+              'Pi SDK not detected. Open PiBazaar inside the Pi Browser (or the Pi Sandbox) to sign in.',
+            )
+          }
           return null
         }
 
-        // Native Pi SDK authentication — `username` scope only — executed inside
-        // the Pi Browser. We deliberately do NOT surface the SDK's raw failure
-        // text (e.g. "We couldn't verify your app") in the UI: it is logged for
-        // observability and the attempt simply stops, so no error banner is shown.
+        // Native Pi SDK authentication — `username` scope only.
         let piAuth: PiAuthResultLite
         try {
+          if (!silent) piDebugAlert('3/5 Calling Pi.authenticate(["username"])…')
           piAuth = (await window.Pi.authenticate(
             ['username'],
             onIncompletePaymentFound,
           )) as PiAuthResultLite
+          if (!silent) {
+            piDebugAlert(`4/5 Pi.authenticate OK — user=${piAuth?.user?.username ?? '(none)'}`)
+          }
         } catch (err) {
           console.warn('[pi-sdk] Pi.authenticate failed:', err)
+          const message = messageFromError(err, 'Pi authentication was cancelled or failed.')
+          if (!silent) {
+            piDebugAlert(`ERROR Pi.authenticate: ${message}`)
+            setAuthError(message)
+          }
           return null
         }
-        if (!piAuth?.accessToken) return null
+        if (!piAuth?.accessToken) {
+          if (!silent) {
+            piDebugAlert('ERROR: Pi.authenticate returned no access token')
+            setAuthError('Pi did not return an access token. Please try again.')
+          }
+          return null
+        }
 
         try {
           // If already logged in, link Pi to it; otherwise log in / provision.
@@ -190,18 +228,22 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
           // Fresh login switches identity — drop cached data. Linking keeps the same user.
           if (!linking) queryClient.clear()
           setCurrentUser(user)
+          if (!silent) piDebugAlert(`5/5 Backend login OK — welcome ${user.username}`)
           return { user, isNewUser: !!isNewUser }
         } catch (err) {
           if (silent) return null
           const message = messageFromError(err, 'Could not log in with Pi. Please try again.')
+          piDebugAlert(`ERROR backend exchange: ${message}`)
           setAuthError(message)
           throw err
         }
       })()
 
       piLoginInFlight.current = attempt
+      if (!silent) setIsLoggingIn(true)
       return attempt.finally(() => {
         piLoginInFlight.current = null
+        if (!silent) setIsLoggingIn(false)
       })
     },
     [setCurrentUser, queryClient],
@@ -239,6 +281,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         user: currentUser,
         isAuthenticated: !!currentUser,
         isLoading,
+        isLoggingIn,
         authError,
         clearError,
         loginWithPi,

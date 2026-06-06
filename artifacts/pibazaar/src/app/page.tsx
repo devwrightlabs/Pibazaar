@@ -54,7 +54,7 @@ function FeedSkeleton() {
 
 export default function HomePage() {
   const { isAuthenticated, currentUser, mapRadius, setMapRadius } = useStore()
-  const { handleLogin, loading: authLoading, error: authError } = usePiAuth()
+  const { handleLogin, loading: authLoading, loggingIn, error: authError } = usePiAuth()
   const [refreshKey, setRefreshKey] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
@@ -104,12 +104,12 @@ export default function HomePage() {
             <div className="w-full max-w-xs">
               <button
                 onClick={() => void handleLogin()}
-                disabled={authLoading}
+                disabled={loggingIn}
                 className="w-full py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
               >
                 <span aria-hidden="true">π</span>
-                <span>{authLoading ? 'Connecting…' : 'Login with Pi'}</span>
+                <span>{loggingIn ? 'Connecting…' : 'Login with Pi'}</span>
               </button>
             </div>
 
