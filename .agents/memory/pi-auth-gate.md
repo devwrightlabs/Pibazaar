@@ -9,9 +9,13 @@ description: Why/how PiBazaar signup is gated to verified Pioneers, and the CORS
 Pi SDK `authenticate(['username'])` (username scope only) and submits the
 `accessToken`; the backend `/auth/signup` re-verifies it via the Pi Platform
 (`verifyPiToken` → `GET /v2/me` with Bearer, no API key) BEFORE inserting the
-user, and rejects with 403 if missing/invalid. The signup form stays username +
-password only. Wallet/payments scope is requested separately at payment time
-(`ConnectPiWalletToPay`), not at signup/login.
+user, and rejects with 403 if missing/invalid. The web auth UI is Pi-only — the
+manual username/password sign-up + login form was removed in favour of a single
+"Login with Pi" button (on both `/login` and the home hero); one Pi login
+provisions a new user or returns an existing one. Wallet/payments scope is
+requested separately at payment time (`ConnectPiWalletToPay`), not at login.
+The username/password `signup`/`login` provider methods still exist (backend
+still supports them) but are no longer surfaced in the web UI.
 
 **Init + auto-login:** `Pi.init()` is treated as a Promise and awaited fully
 (shared in-flight promise in `pi-sdk.ts`) before any `authenticate()`. Web auth

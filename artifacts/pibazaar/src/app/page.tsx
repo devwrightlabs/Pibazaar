@@ -100,27 +100,16 @@ export default function HomePage() {
               Buy and sell locally with Pi — the decentralized marketplace built for Pioneers.
             </p>
 
-            {/* Login / Sign Up buttons */}
-            <div className="flex items-center gap-3 w-full max-w-xs">
+            {/* Single Pi login button */}
+            <div className="w-full max-w-xs">
               <button
                 onClick={() => void handleLogin()}
                 disabled={authLoading}
-                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
-                style={{
-                  backgroundColor: 'var(--color-control-bg)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                {authLoading ? 'Loading…' : 'Login'}
-              </button>
-              <button
-                onClick={() => void handleLogin()}
-                disabled={authLoading}
-                className="flex-1 py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50"
+                className="w-full py-3 rounded-2xl font-bold text-base transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ backgroundColor: 'var(--color-gold)', color: '#000' }}
               >
-                {authLoading ? 'Loading…' : 'Sign Up'}
+                <span aria-hidden="true">π</span>
+                <span>{authLoading ? 'Connecting…' : 'Login with Pi'}</span>
               </button>
             </div>
 
