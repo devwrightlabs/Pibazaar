@@ -21,6 +21,14 @@ from the web client — `PiAuthProvider` now exposes only `loginWithPi`.
 an `onIncompletePaymentFound` callback (module-level, console.warn) — the Pi SDK
 requires it as the 2nd arg even for a username-only login.
 
+**Do not surface the Pi SDK's raw `authenticate` failure text in the UI.** When
+`Pi.authenticate` throws (most notably "We couldn't verify your app" — which
+means the app/domain is not verified in the **Pi Developer Portal**, an external
+config issue, NOT a code bug), the handler logs to console and returns null with
+no `authError` banner. Genuine backend token-exchange errors and the "open in
+Pi Browser" guard message are still surfaced; the SDK's own verification text is
+intentionally swallowed because it is confusing and unactionable for end users.
+
 **Init + auto-login:** `Pi.init()` is treated as a Promise and awaited fully
 (shared in-flight promise in `pi-sdk.ts`) before any `authenticate()`. Web auth
 auto-triggers once on app load (silent, guarded by a ref; no-ops outside the Pi

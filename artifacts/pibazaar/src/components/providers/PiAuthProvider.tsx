@@ -164,19 +164,21 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
           throw new Error(PI_BROWSER_REQUIRED_MESSAGE)
         }
 
+        // Native Pi SDK authentication — `username` scope only — executed inside
+        // the Pi Browser. We deliberately do NOT surface the SDK's raw failure
+        // text (e.g. "We couldn't verify your app") in the UI: it is logged for
+        // observability and the attempt simply stops, so no error banner is shown.
         let piAuth: PiAuthResultLite
         try {
           piAuth = (await window.Pi.authenticate(
             ['username'],
             onIncompletePaymentFound,
           )) as PiAuthResultLite
-          if (!piAuth?.accessToken) throw new Error('Pi authentication was cancelled.')
         } catch (err) {
-          if (silent) return null
-          const message = messageFromError(err, 'Pi authentication was cancelled or failed.')
-          setAuthError(message)
-          throw new Error(message)
+          console.warn('[pi-sdk] Pi.authenticate failed:', err)
+          return null
         }
+        if (!piAuth?.accessToken) return null
 
         try {
           // If already logged in, link Pi to it; otherwise log in / provision.
