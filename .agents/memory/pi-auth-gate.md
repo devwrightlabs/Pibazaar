@@ -14,8 +14,12 @@ manual username/password sign-up + login form was removed in favour of a single
 "Login with Pi" button (on both `/login` and the home hero); one Pi login
 provisions a new user or returns an existing one. Wallet/payments scope is
 requested separately at payment time (`ConnectPiWalletToPay`), not at login.
-The username/password `signup`/`login` provider methods still exist (backend
-still supports them) but are no longer surfaced in the web UI.
+The legacy username/password `signup`/`login` provider methods + their UI
+(forms, the sidebar "use username & password instead" link) were fully removed
+from the web client — `PiAuthProvider` now exposes only `loginWithPi`.
+`window.Pi.authenticate(['username'], onIncompletePaymentFound)` always passes
+an `onIncompletePaymentFound` callback (module-level, console.warn) — the Pi SDK
+requires it as the 2nd arg even for a username-only login.
 
 **Init + auto-login:** `Pi.init()` is treated as a Promise and awaited fully
 (shared in-flight promise in `pi-sdk.ts`) before any `authenticate()`. Web auth
@@ -42,8 +46,13 @@ Server is the source of truth — never trust a client "isVerified" flag.
   `Content-Security-Policy: frame-ancestors` allowing `*.minepi.com`/`*.pi`/Replit
   domains and never send `X-Frame-Options: DENY`. Applied in both the API
   (`app.ts` middleware) and Vite (`server.headers` + `preview.headers`).
-- CORS uses credentials. In development it reflects the request origin (Pi Browser
-  + Replit preview rotate origins). **In production the server fails fast at
-  startup if `CORS_ORIGINS` is empty** — refuse an open credentialed policy.
+- CORS uses credentials and resolves the allow-list with a layered fallback so it
+  **never crashes on startup** (budget-sensitive deployments): (1) `CORS_ORIGINS`
+  if set; (2) else `REPLIT_DOMAINS` mapped to `https://<host>` (logged warn);
+  (3) else reflect the request origin (logged warn). The old "throw if empty in
+  prod" behaviour was removed — failing closed on a missing Secret was killing
+  deployments.
+- Deployment healthcheck probes the API base path `/api`; the health router must
+  answer `/` (not just `/healthz`) with 200 or the rollout is marked unhealthy.
 - Env stage is driven by `APP_ENV` (falls back to `NODE_ENV`): see `lib/env.ts`
   `APP_ENV`/`isProduction`/`CORS_ORIGINS`.

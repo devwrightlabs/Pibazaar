@@ -272,14 +272,6 @@ export default function MainSidebar({ open, onClose }: MainSidebarProps) {
               >
                 {connecting ? 'Connecting…' : 'Log in with Pi'}
               </Button>
-              <Link
-                href="/login"
-                onClick={onClose}
-                className="text-xs font-medium"
-                style={{ color: 'var(--color-gold)' }}
-              >
-                Use username &amp; password instead
-              </Link>
               {authError && (
                 <p className="text-xs" style={{ color: 'var(--color-error)' }}>{authError}</p>
               )}

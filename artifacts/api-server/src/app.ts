@@ -13,13 +13,43 @@ const app: Express = express();
 // When CORS_ORIGINS is set, only those origins may call the API with
 // credentials; otherwise we reflect the request origin (Pi Browser sandbox +
 // Replit preview both rotate origins, so a static allow-list is impractical in
-// development). In production we refuse to reflect all origins: CORS_ORIGINS
-// must be set explicitly, otherwise the server fails fast at startup.
-const allowedOrigins = env.CORS_ORIGINS;
+// development).
+//
+// In production we want a locked-down allow-list, but we must NEVER crash the
+// server on startup just because CORS_ORIGINS was not pasted into the Secrets
+// tab. So we resolve the allow-list with a layered fallback:
+//   1. CORS_ORIGINS (explicit, preferred).
+//   2. The current Replit deployment domain(s) from REPLIT_DOMAINS, mapped to
+//      https:// origins — this keeps the deployed web app working out of the box.
+//   3. As a last resort, reflect the request origin (logged loudly) so the API
+//      stays up rather than rejecting every request.
+function resolveAllowedOrigins(): string[] {
+  if (env.CORS_ORIGINS.length > 0) return env.CORS_ORIGINS;
+
+  const deploymentOrigins = (process.env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean)
+    .map((host) => `https://${host}`);
+
+  if (deploymentOrigins.length > 0) {
+    logger.warn(
+      { deploymentOrigins },
+      "CORS_ORIGINS is not set — falling back to the current Replit deployment " +
+        "domain(s). Set CORS_ORIGINS in the Secrets tab to lock this down.",
+    );
+    return deploymentOrigins;
+  }
+
+  return [];
+}
+
+const allowedOrigins = resolveAllowedOrigins();
 if (env.isProduction && allowedOrigins.length === 0) {
-  throw new Error(
-    "CORS_ORIGINS must be set in production (e.g. https://P2PbazaarMarketplace.replit.app). " +
-      "Refusing to start with an open, credentialed CORS policy.",
+  logger.warn(
+    "CORS_ORIGINS is not set and no REPLIT_DOMAINS deployment domain was found. " +
+      "Reflecting the request origin so the API stays up — set CORS_ORIGINS " +
+      "(e.g. https://P2PbazaarMarketplace.replit.app) to lock this down.",
   );
 }
 app.use(

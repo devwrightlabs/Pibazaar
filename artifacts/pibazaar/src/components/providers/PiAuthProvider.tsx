@@ -1,13 +1,13 @@
 /**
  * AuthProvider
  *
- * Centralizes authentication for the PiBazaar web app against the self-contained
- * Express backend (`/api/auth/*`). Implements the two-step model:
- *   1. Manual Sign Up / Log In (username + password) → issues our JWT.
- *   2. Optional "Log In with Pi" using the Pi SDK → /auth/pi (login or link).
- *
- * The JWT is the single source of truth, persisted via the API client's token
- * helpers. On mount we restore the session from GET /auth/me.
+ * Pi-only authentication for the PiBazaar web app against the self-contained
+ * Express backend (`/api/auth/*`). There is no manual username/password flow:
+ * the sole entry point is "Login with Pi", which runs the Pi SDK inside the Pi
+ * Browser, then exchanges the access token with the backend, which validates it
+ * via GET https://api.minepi.com/v2/me (Bearer, no API key) before issuing our
+ * JWT. The JWT is the single source of truth, persisted via the API client's
+ * token helpers. On mount we restore the session from GET /auth/me.
  */
 
 import {
@@ -24,17 +24,21 @@ import { authApi, setToken, getToken, ApiError } from '@/lib/api/client'
 import { useRealtimeSync } from '@/lib/api/hooks'
 import { initPiSdk } from '@/lib/pi-sdk'
 import { useStore } from '@/store/useStore'
-import type {
-  SelfUser,
-  SignupBody,
-  LoginBody,
-} from '@/lib/api/types'
+import type { SelfUser } from '@/lib/api/types'
 
 const PI_BROWSER_REQUIRED_MESSAGE =
   'Please open PiBazaar inside the Pi Browser to log in with Pi.'
 
-const PI_SIGNUP_REQUIRED_MESSAGE =
-  'Pi verification is required to sign up. Please open PiBazaar inside the Pi Browser to create your account.'
+/**
+ * Required by `Pi.authenticate(scopes, onIncompletePaymentFound)`. The Pi SDK
+ * invokes this when a previously-created payment for this user was never
+ * completed. We only request the `username` scope here (no payments), so this
+ * is a safety net: log it for observability. Payment completion is handled in
+ * the dedicated checkout flow, not during sign-in.
+ */
+function onIncompletePaymentFound(payment: unknown): void {
+  console.warn('[pi-sdk] Incomplete payment found during authentication:', payment)
+}
 
 interface AuthContextValue {
   user: SelfUser | null
@@ -42,8 +46,6 @@ interface AuthContextValue {
   isLoading: boolean
   authError: string | null
   clearError: () => void
-  signup: (body: Pick<SignupBody, 'username' | 'password'>) => Promise<SelfUser>
-  login: (body: LoginBody) => Promise<SelfUser>
   loginWithPi: () => Promise<{ user: SelfUser; isNewUser: boolean }>
   logout: () => void
   refresh: () => Promise<void>
@@ -55,12 +57,6 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   authError: null,
   clearError: () => {},
-  signup: async () => {
-    throw new Error('Auth provider not mounted')
-  },
-  login: async () => {
-    throw new Error('Auth provider not mounted')
-  },
   loginWithPi: async () => {
     throw new Error('Auth provider not mounted')
   },
@@ -72,7 +68,7 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
-/** @deprecated Use useAuth(). Kept for the login page during migration. */
+/** Convenience wrapper used by the home hero's "Login with Pi" button. */
 export function usePiAuth() {
   const ctx = useContext(AuthContext)
   return {
@@ -140,67 +136,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
     }
   }, [refresh])
 
-  const signup = useCallback(
-    async (body: Pick<SignupBody, 'username' | 'password'>) => {
-      setAuthError(null)
-      // Pi gate: only verified Pioneers can create an account. Obtain a Pi
-      // identity token in the background (form stays username + password only)
-      // and submit it; the backend verifies it before creating the account.
-      if (typeof window === 'undefined' || !(await initPiSdk()) || !window.Pi) {
-        const message = PI_SIGNUP_REQUIRED_MESSAGE
-        setAuthError(message)
-        throw new Error(message)
-      }
-
-      let piAuth: PiAuthResultLite
-      try {
-        piAuth = (await window.Pi.authenticate(['username'], () => {})) as PiAuthResultLite
-        if (!piAuth?.accessToken) throw new Error('Pi verification was cancelled.')
-      } catch (err) {
-        const message = messageFromError(err, 'Pi verification was cancelled or failed.')
-        setAuthError(message)
-        throw new Error(message)
-      }
-
-      try {
-        const { token, user } = await authApi.signup({
-          username: body.username,
-          password: body.password,
-          accessToken: piAuth.accessToken,
-          walletAddress: piAuth.user?.wallet_address,
-        })
-        setToken(token)
-        queryClient.clear()
-        setCurrentUser(user)
-        return user
-      } catch (err) {
-        const message = messageFromError(err, 'Sign up failed. Please try again.')
-        setAuthError(message)
-        throw err
-      }
-    },
-    [setCurrentUser, queryClient],
-  )
-
-  const login = useCallback(
-    async (body: LoginBody) => {
-      setAuthError(null)
-      try {
-        const { token, user } = await authApi.login(body)
-        setToken(token)
-        queryClient.clear()
-        setCurrentUser(user)
-        return user
-      } catch (err) {
-        const message = messageFromError(err, 'Incorrect username or password.')
-        setAuthError(message)
-        throw err
-      }
-    },
-    [setCurrentUser, queryClient],
-  )
-
-  // Shared Pi authentication routine used by both the manual "Log in with Pi"
+  // Shared Pi authentication routine used by both the manual "Login with Pi"
   // button and the automatic on-load trigger. Awaits Pi.init() fully, then
   // authenticates with the `username` scope and exchanges the access token with
   // the backend, which validates it via GET /v2/me before issuing our session.
@@ -218,6 +154,9 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
       const attempt = (async () => {
         if (!silent) setAuthError(null)
 
+        // Pi authentication runs exclusively inside the Pi Browser, where
+        // window.Pi is injected. Anywhere else there is nothing to authenticate
+        // against, so we bail out (silently for the auto-trigger).
         const ready = typeof window !== 'undefined' ? await initPiSdk() : false
         if (!ready || !window.Pi) {
           if (silent) return null
@@ -227,7 +166,10 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
 
         let piAuth: PiAuthResultLite
         try {
-          piAuth = (await window.Pi.authenticate(['username'], () => {})) as PiAuthResultLite
+          piAuth = (await window.Pi.authenticate(
+            ['username'],
+            onIncompletePaymentFound,
+          )) as PiAuthResultLite
           if (!piAuth?.accessToken) throw new Error('Pi authentication was cancelled.')
         } catch (err) {
           if (silent) return null
@@ -237,7 +179,7 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         }
 
         try {
-          // If already logged in (manual account), link Pi to it; otherwise log in / provision.
+          // If already logged in, link Pi to it; otherwise log in / provision.
           const linking = !!getToken()
           const { token, user, isNewUser } = await authApi.pi(
             { accessToken: piAuth.accessToken, walletAddress: piAuth.user?.wallet_address },
@@ -298,8 +240,6 @@ export default function PiAuthProvider({ children }: { children: React.ReactNode
         isLoading,
         authError,
         clearError,
-        signup,
-        login,
         loginWithPi,
         logout,
         refresh,
