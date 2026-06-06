@@ -73,3 +73,17 @@ URL to the current deployment, not to change code.
   answer `/` (not just `/healthz`) with 200 or the rollout is marked unhealthy.
 - Env stage is driven by `APP_ENV` (falls back to `NODE_ENV`): see `lib/env.ts`
   `APP_ENV`/`isProduction`/`CORS_ORIGINS`.
+
+# Pi SDK sandbox flag
+
+- `Pi.init({ sandbox })` is environment-specific and getting it wrong is silent:
+  the **Pi Sandbox** (`sandbox.minepi.com`) embeds the app in an iframe and
+  REQUIRES `sandbox: true` — with `false` its handshake never completes and it
+  hangs forever on its own purple "Translation loading…" overlay (the app itself
+  renders fine everywhere else; symptom is sandbox-only). The **real Pi Browser**
+  (production) needs `sandbox: false`.
+  **Why:** a hardcoded flag can only satisfy one of the two; testing happens in
+  the Sandbox while users live in the Pi Browser.
+  **How to apply:** resolve it dynamically (see `pi-sdk.ts resolvePiSandboxMode`):
+  `VITE_PI_SANDBOX` override → else auto-detect a `sandbox.minepi.com` embedder via
+  `window.location.ancestorOrigins` / `document.referrer` → else `false`.

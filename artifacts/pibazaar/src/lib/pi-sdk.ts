@@ -72,6 +72,59 @@ function getPiSdk(): PiSDK | null {
 }
 
 /**
+ * Decide whether to start the Pi SDK in sandbox (test) mode.
+ *
+ * The Pi Sandbox (https://sandbox.minepi.com) embeds the app in an iframe and
+ * REQUIRES `Pi.init({ sandbox: true })` — otherwise its handshake never
+ * completes and the sandbox sits forever on its "Translation loading…" screen.
+ * The real Pi Browser (production) requires `sandbox: false`.
+ *
+ * Resolution order:
+ *  1. Explicit build-time override `VITE_PI_SANDBOX` ("true" / "false").
+ *  2. Auto-detect: if the app is embedded by a `sandbox.minepi.com` host
+ *     (via iframe ancestor origins or the document referrer), use sandbox mode.
+ *  3. Default to production mode (`false`).
+ */
+/** True only when `value` is a URL whose host is exactly the Pi Sandbox. */
+function isPiSandboxUrl(value: string): boolean {
+  try {
+    return new URL(value).hostname === 'sandbox.minepi.com'
+  } catch {
+    return false
+  }
+}
+
+function resolvePiSandboxMode(): boolean {
+  const override = import.meta.env.VITE_PI_SANDBOX
+  if (override === 'true') return true
+  if (override === 'false') return false
+
+  if (typeof window === 'undefined') return false
+
+  try {
+    const ancestors = (window.location as Location & { ancestorOrigins?: DOMStringList })
+      .ancestorOrigins
+    if (ancestors) {
+      for (let i = 0; i < ancestors.length; i++) {
+        if (isPiSandboxUrl(ancestors[i])) return true
+      }
+    }
+  } catch {
+    /* ancestorOrigins unavailable — fall through to referrer check */
+  }
+
+  try {
+    if (typeof document !== 'undefined' && isPiSandboxUrl(document.referrer)) {
+      return true
+    }
+  } catch {
+    /* referrer unavailable */
+  }
+
+  return false
+}
+
+/**
  * Initialise the Pi SDK.
  *
  * Call this once on app startup (e.g. in a top-level layout or provider).
@@ -92,12 +145,14 @@ export async function initPiSdk(): Promise<boolean> {
   }
   const pi = window.Pi
 
+  const sandbox = resolvePiSandboxMode()
+
   piInitPromise = (async () => {
     try {
       // Pi.init() returns a Promise in SDK 2.0 — await it fully before auth.
-      await pi.init({ version: '2.0', sandbox: false })
+      await pi.init({ version: '2.0', sandbox })
       piSdkInitialised = true
-      console.info('[pi-sdk] Initialized successfully (sandbox: false)')
+      console.info(`[pi-sdk] Initialized successfully (sandbox: ${sandbox})`)
       return true
     } catch (error) {
       console.error('[pi-sdk] Initialization failed:', error)
