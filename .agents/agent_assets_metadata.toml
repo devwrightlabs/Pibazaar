@@ -1,0 +1,92 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "W-inqdkyQDIjzJ7hpPPLe"
+uri = "file://screenshots/01-login.jpg"
+type = "image"
+title = "01 — Login (Sign in with Pi)"
+
+[[outputs]]
+id = "LRxXxhvZcZ9k9KLSypD6A"
+uri = "file://screenshots/02-home.jpg"
+type = "image"
+title = "02 — Home"
+
+[[outputs]]
+id = "_9oY-tBagO42WF7tKFn4w"
+uri = "file://screenshots/03-marketplace.jpg"
+type = "image"
+title = "03 — Marketplace"
+
+[[outputs]]
+id = "c190Y0jPmrDDSRroYBzoV"
+uri = "file://screenshots/04-browse.jpg"
+type = "image"
+title = "04 — Browse / Search"
+
+[[outputs]]
+id = "Mie2UXyvaGDbbWWOCJiBk"
+uri = "file://screenshots/05-product-detail.jpg"
+type = "image"
+title = "05 — Product Detail"
+
+[[outputs]]
+id = "UiXU4Q1zcSxy7PfGC6_6w"
+uri = "file://screenshots/06-sell.jpg"
+type = "image"
+title = "06 — Sell a Listing"
+
+[[outputs]]
+id = "hm5EgAjPU6mAN8GUdrrlt"
+uri = "file://screenshots/07-settings.jpg"
+type = "image"
+title = "07 — Settings"
+
+[[outputs]]
+id = "84J_M-Gt3ynLcEwxmRjk6"
+uri = "file://screenshots/08-dashboard.jpg"
+type = "image"
+title = "08 — Seller Dashboard"
+
+[[outputs]]
+id = "qX0P2M3Fle4hF84J9OqXx"
+uri = "file://screenshots/09-profile.jpg"
+type = "image"
+title = "09 — Profile"
+
+[[outputs]]
+id = "Y9j7GkmrWifKwvkH5ue9X"
+uri = "file://screenshots/10-orders.jpg"
+type = "image"
+title = "10 — My Orders"
+
+[[outputs]]
+id = "AYeMfaYHMu1usSxBEU_LF"
+uri = "file://screenshots/11-messages.jpg"
+type = "image"
+title = "11 — Messages"
+
+[[outputs]]
+id = "SG9DMo3mkHlqbGIo1Qmwf"
+uri = "file://screenshots/12-notifications.jpg"
+type = "image"
+title = "12 — Notifications"
+
+[[outputs]]
+id = "GMhpXldPtEgeNqhrrhfS5"
+uri = "file://screenshots/13-search-filter.jpg"
+type = "image"
+title = "13 — Category Filter (Electronics)"
+
+[[outputs]]
+id = "c8iu49egpgLZFW8acC3k3"
+uri = "file://screenshots/14-product-buy.jpg"
+type = "image"
+title = "14 — Product (Buy with Pi)"
+
+[[outputs]]
+id = "loEV5rN0t2SFp1XB8lvGx"
+uri = "file://screenshots/15-checkout.jpg"
+type = "image"
+title = "15 — Checkout (Pi escrow + 2% seller fee)"

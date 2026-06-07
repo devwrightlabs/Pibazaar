@@ -210,18 +210,46 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
             handleFiles(e.dataTransfer.files)
           }}
           onClick={() => fileInputRef.current?.click()}
-          className="flex flex-col items-center justify-center p-8 rounded-xl cursor-pointer transition-colors"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              fileInputRef.current?.click()
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Add photos"
+          className="flex flex-col items-center justify-center gap-2 p-8 rounded-2xl cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
           style={{
-            border: `2px dashed ${dragOver ? '#F0C040' : 'rgba(136,136,136,0.3)'}`,
-            backgroundColor: dragOver ? 'rgba(240,192,64,0.05)' : 'var(--color-bg)',
+            border: `2px dashed ${dragOver ? 'var(--color-gold)' : 'var(--color-control-bg)'}`,
+            backgroundColor: dragOver ? 'color-mix(in srgb, var(--color-gold) 6%, transparent)' : 'var(--color-secondary-bg)',
           }}
         >
-          <span className="text-3xl mb-2"></span>
-          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--color-gold) 12%, transparent)' }}
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-gold)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
             {dragOver ? 'Drop photos here' : 'Drag photos here or tap to browse'}
           </p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-subtext)' }}>
-            JPG, PNG, WEBP \u2022 Max {MAX_PHOTOS} photos \u2022 1MB each
+          <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
+            JPG, PNG, WEBP • Max {MAX_PHOTOS} photos • 1MB each
           </p>
           <input
             ref={fileInputRef}
@@ -300,7 +328,7 @@ export default function PhotoUploader({ photos, onPhotosChange }: Props) {
 
       {items.length > 0 && (
         <p className="text-xs" style={{ color: 'var(--color-subtext)' }}>
-          {items.length}/{MAX_PHOTOS} photos \u2022 Drag to reorder \u2022 First photo is the cover
+          {items.length}/{MAX_PHOTOS} photos • Drag to reorder • First photo is the cover
         </p>
       )}
     </div>

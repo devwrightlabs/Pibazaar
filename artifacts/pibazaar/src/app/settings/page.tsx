@@ -3,28 +3,31 @@ import { useAuth } from '@/components/providers/PiAuthProvider'
 import { useUIStore } from '@/store/useUIStore'
 import { useUpdateProfile } from '@/lib/api/hooks'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
 import { ApiError } from '@/lib/api/client'
 import type { ThemePreference, JurisdictionMode } from '@/lib/api/types'
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+const DIVIDER = '1px solid var(--color-control-bg)'
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl p-5 space-y-4" style={{ backgroundColor: 'var(--color-card-bg)' }}>
-      <h2 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>
-        {title}
-      </h2>
+    <h2 className="mb-2 px-1 text-base font-bold" style={{ color: 'var(--color-text)' }}>
       {children}
-    </div>
+    </h2>
   )
 }
 
-function fieldStyle(): React.CSSProperties {
-  return {
-    backgroundColor: 'var(--color-secondary-bg)',
-    color: 'var(--color-text)',
-    border: '1px solid var(--color-border-token)',
-  }
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="overflow-hidden rounded-2xl"
+      style={{ backgroundColor: 'var(--color-card-bg)' }}
+    >
+      {children}
+    </div>
+  )
 }
 
 function DeleteModal({ onClose }: { onClose: () => void }) {
@@ -47,14 +50,13 @@ function DeleteModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { user, isAuthenticated, isLoading, refresh } = useAuth()
+  const { user, isAuthenticated, isLoading, refresh, logout } = useAuth()
   const themeMode = useUIStore((s) => s.themeMode)
   const setThemeMode = useUIStore((s) => s.setThemeMode)
   const jurisdictionMode = useUIStore((s) => s.jurisdictionMode)
   const setJurisdictionMode = useUIStore((s) => s.setJurisdictionMode)
   const updateProfile = useUpdateProfile()
 
-  const [email, setEmail] = useState('')
   const [walletAddress, setWalletAddress] = useState('')
   const [theme, setTheme] = useState<ThemePreference>('dark')
   const [jurisdiction, setJurisdiction] = useState<JurisdictionMode>('global')
@@ -64,7 +66,6 @@ export default function SettingsPage() {
   // Seed local form state from the authenticated user / UI store.
   useEffect(() => {
     if (user) {
-      setEmail(user.email ?? '')
       setWalletAddress(user.walletAddress ?? '')
       setTheme(user.themePreference)
       setJurisdiction(user.jurisdictionMode)
@@ -85,7 +86,6 @@ export default function SettingsPage() {
     setError(null)
     updateProfile.mutate(
       {
-        email: email.trim() || undefined,
         walletAddress: walletAddress.trim() || undefined,
         themePreference: theme,
         jurisdictionMode: jurisdiction,
@@ -129,8 +129,7 @@ export default function SettingsPage() {
 
   return (
     <SettingsInner
-      email={email}
-      setEmail={setEmail}
+      username={user?.username ?? ''}
       walletAddress={walletAddress}
       setWalletAddress={setWalletAddress}
       theme={theme}
@@ -139,6 +138,7 @@ export default function SettingsPage() {
       onJurisdictionChange={handleJurisdictionChange}
       themeMode={themeMode}
       onSave={handleSave}
+      onLogout={logout}
       saving={updateProfile.isPending}
       toast={toast}
       error={error}
@@ -147,8 +147,7 @@ export default function SettingsPage() {
 }
 
 interface InnerProps {
-  email: string
-  setEmail: (v: string) => void
+  username: string
   walletAddress: string
   setWalletAddress: (v: string) => void
   theme: ThemePreference
@@ -157,6 +156,7 @@ interface InnerProps {
   onJurisdictionChange: (j: JurisdictionMode) => void
   themeMode: string
   onSave: () => void
+  onLogout: () => void
   saving: boolean
   toast: boolean
   error: string | null
@@ -164,8 +164,7 @@ interface InnerProps {
 
 function SettingsInner(props: InnerProps) {
   const {
-    email,
-    setEmail,
+    username,
     walletAddress,
     setWalletAddress,
     theme,
@@ -173,6 +172,7 @@ function SettingsInner(props: InnerProps) {
     jurisdiction,
     onJurisdictionChange,
     onSave,
+    onLogout,
     saving,
     toast,
     error,
@@ -190,9 +190,9 @@ function SettingsInner(props: InnerProps) {
 
   return (
     <main className="min-h-screen pb-32" style={{ backgroundColor: 'var(--color-bg)' }}>
-      <div className="px-4 pt-6 max-w-2xl mx-auto space-y-5">
+      <div className="px-4 pt-6 max-w-2xl mx-auto space-y-6">
         {/* Header */}
-        <div className="mb-2">
+        <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>
             Settings
           </h1>
@@ -202,104 +202,112 @@ function SettingsInner(props: InnerProps) {
         </div>
 
         {/* Account */}
-        <SectionCard title="👤 Account">
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-subtext)' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                placeholder="you@example.com"
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                style={fieldStyle()}
-              />
+        <section>
+          <SectionLabel>Account</SectionLabel>
+          <Card>
+            <div className="flex items-center justify-between gap-4 px-4 py-4">
+              <span className="text-sm" style={{ color: 'var(--color-subtext)' }}>
+                Username
+              </span>
+              <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                @{username}
+              </span>
             </div>
-            <div>
-              <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-subtext)' }}>
+            <div className="px-4 py-4" style={{ borderTop: DIVIDER }}>
+              <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--color-subtext)' }}>
                 Pi Wallet Address
               </label>
-              <input
-                type="text"
+              <Input
                 value={walletAddress}
                 placeholder="G..."
                 onChange={(e) => setWalletAddress(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl text-sm outline-none font-mono"
-                style={fieldStyle()}
+                className="font-mono"
               />
-              <p className="text-xs mt-1" style={{ color: 'var(--color-subtext)' }}>
+              <p className="mt-1.5 text-xs" style={{ color: 'var(--color-subtext)' }}>
                 Payouts from completed sales are sent here.
               </p>
             </div>
-          </div>
-        </SectionCard>
+          </Card>
+        </section>
 
         {/* Appearance */}
-        <SectionCard title="🎨 Appearance">
-          <div className="grid grid-cols-2 gap-3">
-            {themeOptions.map(({ key, label, emoji }) => {
-              const active = theme === key
-              return (
-                <button
-                  key={key}
-                  onClick={() => onThemeChange(key)}
-                  className="rounded-xl p-4 text-left transition-all"
-                  style={{
-                    backgroundColor: 'var(--color-secondary-bg)',
-                    border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span>{emoji}</span>
-                    <span className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
-                      {label}
-                    </span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </SectionCard>
+        <section>
+          <SectionLabel>Appearance</SectionLabel>
+          <Card>
+            <div className="grid grid-cols-2 gap-3 p-4">
+              {themeOptions.map(({ key, label, emoji }) => {
+                const active = theme === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => onThemeChange(key)}
+                    className="rounded-xl p-4 text-left transition-all"
+                    style={{
+                      backgroundColor: 'var(--color-secondary-bg)',
+                      border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{emoji}</span>
+                      <span className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
+                        {label}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </Card>
+        </section>
 
         {/* Marketplace */}
-        <SectionCard title="🌍 Marketplace">
-          <div className="grid grid-cols-2 gap-3">
-            {jurisdictionOptions.map(({ key, label, desc }) => {
-              const active = jurisdiction === key
-              return (
-                <button
-                  key={key}
-                  onClick={() => onJurisdictionChange(key)}
-                  className="rounded-xl p-4 text-left transition-all"
-                  style={{
-                    backgroundColor: 'var(--color-secondary-bg)',
-                    border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
-                  }}
-                >
-                  <span className="text-sm font-bold block" style={{ color: 'var(--color-text)' }}>
-                    {label}
-                  </span>
-                  <span className="text-xs mt-1 block" style={{ color: 'var(--color-subtext)' }}>
-                    {desc}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </SectionCard>
+        <section>
+          <SectionLabel>Marketplace</SectionLabel>
+          <Card>
+            <div className="grid grid-cols-2 gap-3 p-4">
+              {jurisdictionOptions.map(({ key, label, desc }) => {
+                const active = jurisdiction === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => onJurisdictionChange(key)}
+                    className="rounded-xl p-4 text-left transition-all"
+                    style={{
+                      backgroundColor: 'var(--color-secondary-bg)',
+                      border: `2px solid ${active ? 'var(--color-gold)' : 'transparent'}`,
+                    }}
+                  >
+                    <span className="text-sm font-bold block" style={{ color: 'var(--color-text)' }}>
+                      {label}
+                    </span>
+                    <span className="text-xs mt-1 block" style={{ color: 'var(--color-subtext)' }}>
+                      {desc}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </Card>
+        </section>
 
-        {/* Danger zone */}
-        <SectionCard title="⚠️ Account Actions">
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="w-full py-3 rounded-xl text-sm font-semibold transition-all"
-            style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--color-error)' }}
-          >
-            🗑️ Delete Account
-          </button>
-        </SectionCard>
+        {/* Account actions — Log Out sits directly above Delete Account */}
+        <section>
+          <SectionLabel>Account Actions</SectionLabel>
+          <Card>
+            <div className="space-y-3 p-4">
+              <Button variant="outline" size="lg" onClick={onLogout} className="w-full">
+                Log Out
+              </Button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="w-full rounded-xl py-3 text-sm font-semibold transition-all"
+                style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--color-error)', minHeight: 44 }}
+              >
+                Delete Account
+              </button>
+            </div>
+          </Card>
+        </section>
 
         {error && (
           <div className="rounded-xl p-3" style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid var(--color-error)' }}>

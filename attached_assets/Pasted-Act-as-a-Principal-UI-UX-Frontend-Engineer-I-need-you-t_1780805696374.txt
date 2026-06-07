@@ -1,0 +1,24 @@
+Act as a Principal UI/UX Frontend Engineer. I need you to execute a codebase-wide UI overhaul. Before you write or modify any code, read the following design rules. You must apply these UI/UX principles globally across the entire app to replace the basic "AI-generated form" look with a premium, highly structured, Amazon-inspired mobile experience.
+
+### 1. Global UI/UX Design System (Apply to all frontend files)
+* Layout & Structure (Amazon-Style): Abandon floating text and unstructured forms. Group all related settings and inputs into clearly defined "Cards" or flush edge-to-edge list items. 
+* Borders & Dividers: Use subtle, 1px solid dividers (e.g., #27272a in dark mode or #e4e4e7 in light mode) between list items to separate them cleanly, exactly like Amazon's settings menus.
+* Spacing: Increase touch targets. All tappable rows, inputs, and buttons must have generous padding (minimum 16px).
+* Typography & Hierarchy: Section headers should be clean, bold, and slightly larger, without dated background gradients. Input labels should be a muted, secondary text color to let the user's input stand out.
+* Buttons: Primary actions must be unmistakable. Use the app's vibrant yellow accent color with contrasting dark text for main buttons. They should be solid blocks with subtle rounded corners.
+
+### 2. Specific Screen Fixes (Execute Immediately)
+Do not alter my backend database logic, API routes, or Pi SDK integrations. Only modify the frontend UI/components to match the new design system.
+
+Settings Page Overhaul:
+1. REMOVE the Email field entirely. It should not be an input field, it should not look like a search bar, and it must not be visible on this screen at all. Delete it from the UI completely.
+2. ADD a highly visible "Log Out" button directly above the "Delete Account" button. It should securely clear the local session. Style it as a standard secondary button.
+3. Fix the "Save Settings" text at the bottom. Convert it into a prominent, full-width primary button using the app's yellow accent color so it is actually visible.
+4. Restructure the sections ("Account", "Appearance", "Marketplace") into a clean, Amazon-style vertical list with subtle horizontal dividers between the options. Remove the colored gradients behind the section titles.
+
+Sell an Item Page Overhaul:
+1. Fix the "Category" section: Convert the overwhelming, multi-line wall of text options into a clean, single horizontal-scrolling row of selectable "chips," or change it to a sleek dropdown menu.
+2. Inputs: Remove the harsh white outlines on text boxes ("Title", "Price"). Give inputs a subtle background color, a very faint border, and soft padding.
+3. Photo Upload: Ensure the drag-and-drop zone has a clean, dashed border with centered icons/text that match the premium theme.
+
+Review the entire codebase and apply these styling updates now. Ensure the UI looks like a cohesive, professional mobile application.

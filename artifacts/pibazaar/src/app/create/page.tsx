@@ -287,18 +287,19 @@ export default function CreateListingPage() {
             />
           </div>
 
-          {/* Category */}
+          {/* Category — single horizontal-scrolling row of chips */}
           <div>
             <FieldLabel>Category</FieldLabel>
-            <div className="flex flex-wrap gap-2">
+            <div className="-mx-4 flex gap-2 overflow-x-auto scrollbar-hide px-4 pb-1">
               {CATEGORIES.map((cat) => (
-                <Pill
-                  key={cat}
-                  active={draft.category === cat}
-                  onClick={() => update({ category: cat })}
-                >
-                  {cat}
-                </Pill>
+                <div key={cat} className="shrink-0">
+                  <Pill
+                    active={draft.category === cat}
+                    onClick={() => update({ category: cat })}
+                  >
+                    {cat}
+                  </Pill>
+                </div>
               ))}
             </div>
           </div>
