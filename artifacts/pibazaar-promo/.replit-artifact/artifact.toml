@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/pibazaar-promo/"
+title = "PiBazaar Promo Video"
+version = "1.0.0"
+id = "artifacts/pibazaar-promo"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/pibazaar-promo/" ]
+localPort = 21756
+
+[services.development]
+run = "pnpm --filter @workspace/pibazaar-promo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pibazaar-promo", "run", "build" ]
+publicDir = "artifacts/pibazaar-promo/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21756"
+BASE_PATH = "/pibazaar-promo/"
