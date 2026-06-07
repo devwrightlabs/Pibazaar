@@ -18,19 +18,23 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-secondary-bg/60 backdrop-blur-lg">
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between gap-2 px-3 py-3">
         {/* Logo — links home */}
-        <Link href="/" className="flex items-center gap-2" aria-label="Go home">
-          <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2"
+          aria-label="Go home"
+        >
+          <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center shrink-0">
             <span className="font-bold text-black text-sm">π</span>
           </div>
-          <span className="text-lg font-bold font-heading text-text-primary">
+          <span className="text-lg font-bold font-heading text-text-primary whitespace-nowrap">
             Pi Bazaar
           </span>
         </Link>
 
         {/* Jurisdiction toggle */}
-        <div className="flex items-center">
+        <div className="flex min-w-0 items-center">
           <button
             onClick={() => setJurisdictionMode(jurisdictionMode === 'local' ? 'global' : 'local')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200"
@@ -49,7 +53,7 @@ export default function Navbar() {
         </div>
 
         {/* Auth area */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           <NotificationBell />
           {isLoading ? (
             <Skeleton shape="line" className="h-9 w-28 rounded-xl" />
