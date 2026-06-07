@@ -5,8 +5,10 @@
  * (`username` scope) via the shared auth provider. The provider awaits Pi.init()
  * fully before authenticating, sends the access token to the backend, and the
  * backend validates it via GET https://api.minepi.com/v2/me (Bearer, no API key)
- * before issuing our JWT session. Auth also auto-triggers on load inside the Pi
- * Browser; this page is the manual entry point and the redirect target.
+ * before issuing our JWT session. Login is gesture-only — `Pi.authenticate()` is
+ * never called automatically on load (the Pi Browser only opens its "Allow"
+ * dialog from a user tap). Returning users with a saved session are restored by
+ * the provider's refresh() on mount; this page is the manual entry/redirect target.
  */
 
 import { useEffect, useState } from 'react'

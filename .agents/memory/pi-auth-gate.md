@@ -21,15 +21,22 @@ from the web client — `PiAuthProvider` now exposes only `loginWithPi`.
 an `onIncompletePaymentFound` callback (module-level, console.warn) — the Pi SDK
 requires it as the 2nd arg even for a username-only login.
 
-**The MANUAL login path surfaces errors; the SILENT auto-login path stays quiet.**
-Every failure branch in `runPiLogin` is gated on `!silent`: a manual click sets a
-visible `authError` for missing `window.Pi`, an `authenticate` throw (incl. "We
-couldn't verify your app" = app/domain not verified in the **Pi Developer Portal**,
-an external config issue NOT a code bug), a missing access token, and backend
-token-exchange failure. The silent on-load attempt sets no UI/error state.
-**Why:** an earlier design swallowed *all* `authenticate` failures, so a failing
-login in the Pi Sandbox (which has no dev console) made the button look "completely
-unresponsive" — no feedback at all. Surfacing on the manual path is the fix.
+**Login is gesture-only; NEVER call `Pi.authenticate()` automatically on load.**
+`runPiLogin` runs solely from an explicit "Login with Pi" tap and surfaces a
+visible `authError` on every failure branch: missing `window.Pi`, an
+`authenticate` throw (incl. "We couldn't verify your app" = app/domain not
+verified in the **Pi Developer Portal**, an external config issue NOT a code
+bug), a missing access token, and backend token-exchange failure.
+**Why (two compounding bugs):** (1) an earlier design swallowed *all*
+`authenticate` failures, so a failing login in the console-less Pi Sandbox made
+the button look "completely unresponsive". (2) A later "silent auto-login" effect
+called `Pi.authenticate()` on mount with no user gesture — the Pi Browser only
+opens its "Allow" dialog from a gesture, so that promise never resolved, and the
+shared in-flight dedupe made the manual tap return that same stuck promise,
+freezing the button on "Connecting…". Fix: removed silent auto-login entirely;
+the in-flight ref now only dedupes rapid double-taps of the manual button.
+Returning users are still signed in automatically by `refresh()` (saved JWT
+session) on mount, which makes NO Pi SDK call.
 **Visual debugging:** `piDebugAlert()` (in `pi-sdk.ts`) shows `alert()` step traces
 for the console-less Sandbox/Browser, gated behind `?pidebug=1` (sticky via
 localStorage `pi-debug`) / `VITE_PI_DEBUG=true`; never fires for normal users.
@@ -38,11 +45,10 @@ state (`isLoggingIn` / local `piLoading`), NEVER on session-restore `isLoading` 
 a stalled `GET /auth/me` must not be able to permanently disable the button. Use
 `isLoading` only for identity visuals (avatar skeleton).
 
-**Init + auto-login:** `Pi.init()` is treated as a Promise and awaited fully
-(shared in-flight promise in `pi-sdk.ts`) before any `authenticate()`. Web auth
-auto-triggers once on app load (silent, guarded by a ref; no-ops outside the Pi
-Browser) and is also available via the manual "Log in with Pi" button; both share
-one in-flight login promise to avoid a double-`authenticate` race.
+**Init:** `Pi.init()` is treated as a Promise and awaited fully (shared in-flight
+promise in `pi-sdk.ts`) before any `authenticate()`. Web auth is triggered ONLY
+by the manual "Login with Pi" button (no on-load auto-`authenticate` — see the
+gesture-only rule above); the in-flight login promise just dedupes double-taps.
 
 **Why:** Product decision (user-confirmed) — only real Pioneers in the Pi Browser
 may sign up; this blocks normal-browser/bot signups. The Pi SDK only exists inside
