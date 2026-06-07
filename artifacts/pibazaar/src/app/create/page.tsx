@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore'
 import { useAuth } from '@/components/providers/PiAuthProvider'
 import { listingsApi, ApiError } from '@/lib/api/client'
 import { useUpdateListing } from '@/lib/api/hooks'
+import { initPiSdk, payListingFee, LISTING_FEE_PI } from '@/lib/pi-sdk'
 import PhotoUploader from '@/components/PhotoUploader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -183,22 +184,49 @@ export default function CreateListingPage() {
 
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setPublishing(true)
+
     try {
-      const body = buildInput(draft, 'active')
+      // 1. Save listing as draft first (so we have an ID to attach to the payment).
+      const draftBody = buildInput(draft, 'draft')
       let id = draft.serverId
-      if (id) {
-        await updateListing.mutateAsync({ id, body })
-      } else {
-        const { listing } = await listingsApi.create(body)
+      if (!id) {
+        const { listing } = await listingsApi.create(draftBody)
         id = listing.id
+        setDraft({ serverId: id })
+      } else {
+        await updateListing.mutateAsync({ id, body: draftBody })
       }
+
+      // 2. Ensure Pi SDK is initialised before opening the payment dialog.
+      const ready = await initPiSdk()
+      if (!ready) {
+        openModal({
+          title: 'Pi SDK unavailable',
+          message: 'Open PiBazaar inside the Pi Browser to pay the listing fee.',
+          variant: 'alert',
+        })
+        setPublishing(false)
+        return
+      }
+
+      // 3. Collect 0.5π listing fee. The backend activates the listing once
+      //    the blockchain confirms and the completion endpoint is called.
+      await payListingFee(id)
+
       clearDraft()
-      navigate(id ? `/products/${id}` : '/dashboard')
+      navigate(`/products/${id}`)
     } catch (err) {
       const msg =
         err instanceof ApiError || err instanceof Error
           ? err.message
           : 'Failed to publish listing'
+
+      // Cancellation is not an error — just stop the spinner.
+      if (msg === 'Payment cancelled') {
+        setPublishing(false)
+        return
+      }
+
       openModal({
         title: 'Publish failed',
         message: `${msg} Please try again.`,
@@ -395,7 +423,7 @@ export default function CreateListingPage() {
             loading={publishing}
             onClick={() => void handlePublish()}
           >
-            {publishing ? 'Publishing…' : 'Publish listing'}
+            {publishing ? 'Publishing…' : `Publish listing · ${LISTING_FEE_PI}π fee`}
           </Button>
         </div>
       </div>

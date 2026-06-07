@@ -267,7 +267,23 @@ export async function authenticateWithPi(): Promise<PiAuthResult | null> {
     }
 
     const scopes = ['username', 'payments', 'wallet_address']
-    const onIncompletePaymentFound = () => {}
+
+    // Handle any payment that was started but not finished (e.g. app crashed
+    // mid-flow). We relay it to the backend which approves + completes it so
+    // it is never silently abandoned.
+    const onIncompletePaymentFound = (payment: PiPayment) => {
+      console.warn('[pi-sdk] Incomplete payment found, completing via backend:', payment.identifier)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('pibazaar-token') : null
+      fetch('/api/payments/listing-fee/complete-incomplete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ paymentId: payment.identifier }),
+      }).catch((err) => console.error('[pi-sdk] complete-incomplete failed:', err))
+    }
+
     const authResult = await window.Pi.authenticate(scopes, onIncompletePaymentFound)
     console.info('[pi-sdk] Wallet Connected! Welcome: ' + authResult.user.username)
     return authResult
@@ -296,6 +312,86 @@ export function createPiPayment(
     console.error('Pi payment creation failed:', error)
     callbacks.onError(error instanceof Error ? error : new Error('Unknown error'))
   }
+}
+
+// ─── Listing fee payment (U2A) ────────────────────────────────────────────────
+
+export const LISTING_FEE_PI = 0.5
+
+/**
+ * Collect the 0.5π listing fee from the seller before publishing a listing.
+ *
+ * Returns a Promise that resolves when the listing has been activated on the
+ * server (after onReadyForServerCompletion), or rejects with an error message
+ * if the user cancels, the SDK is unavailable, or either server call fails.
+ *
+ * Must be called after Pi.init() has resolved (guaranteed by initPiSdk()).
+ */
+export function payListingFee(listingId: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (!(typeof window !== 'undefined' && window.Pi)) {
+      reject(new Error('Pi SDK not available — open PiBazaar in the Pi Browser.'))
+      return
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('pibazaar-token') : null
+
+    const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) authHeaders['Authorization'] = `Bearer ${token}`
+
+    window.Pi.createPayment(
+      {
+        amount: LISTING_FEE_PI,
+        memo: 'PiBazaar listing fee',
+        metadata: { type: 'listing_fee', listingId },
+      },
+      {
+        onReadyForServerApproval: (paymentId) => {
+          fetch('/api/payments/listing-fee/approve', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ paymentId, listingId }),
+          })
+            .then(async (res) => {
+              if (!res.ok) {
+                const d = await res.json().catch(() => ({})) as { error?: string }
+                console.error('[pi-sdk] listing-fee approve failed:', d.error ?? res.status)
+              }
+            })
+            .catch((err: unknown) => {
+              console.error('[pi-sdk] listing-fee approve failed:', err)
+            })
+        },
+
+        onReadyForServerCompletion: (paymentId, txid) => {
+          fetch('/api/payments/listing-fee/complete', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ paymentId, txid, listingId }),
+          })
+            .then(async (res) => {
+              if (!res.ok) {
+                const d = await res.json().catch(() => ({})) as { error?: string }
+                reject(new Error(d.error ?? `Complete failed (${res.status})`))
+              } else {
+                resolve()
+              }
+            })
+            .catch((err: unknown) => {
+              reject(err instanceof Error ? err : new Error('Network error during completion'))
+            })
+        },
+
+        onCancel: (_paymentId) => {
+          reject(new Error('Payment cancelled'))
+        },
+
+        onError: (error) => {
+          reject(error)
+        },
+      },
+    )
+  })
 }
 
 // ─── Server communication helpers ─────────────────────────────────────────────
