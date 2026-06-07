@@ -1,64 +1,75 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import dashboardImg from '@assets/pibazaar-screens/08-dashboard.jpg';
+import sellImg from '@assets/pibazaar-screens/06-sell.jpg';
 
 export function Scene5() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setPhase(1), 500),
-      setTimeout(() => setPhase(2), 1500),
-      setTimeout(() => setPhase(3), 2500),
-      setTimeout(() => setPhase(4), 4500),
+      setTimeout(() => setPhase(1), 600),
+      setTimeout(() => setPhase(2), 1800),
+      setTimeout(() => setPhase(3), 3500),
+      setTimeout(() => setPhase(4), 7000), // exit
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
   return (
     <motion.div 
-      className="absolute inset-0 flex items-center justify-center overflow-hidden"
-      initial={{ opacity: 0, scale: 1.1 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 1 }}
+      className="absolute inset-0 flex items-center overflow-hidden bg-[var(--color-bg-dark)]"
+      initial={{ x: '-100%', opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: '100%', opacity: 0 }}
+      transition={{ duration: 1, ease: [0.76, 0, 0.24, 1] }}
     >
-      <div className="absolute inset-0 bg-black" />
-      
-      {/* Background glow */}
-      <motion.div 
-        className="absolute w-[60vw] h-[60vw] bg-[var(--color-primary)]/15 rounded-full blur-[100px]"
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={phase >= 1 ? { scale: 1, opacity: 1 } : { scale: 0.5, opacity: 0 }}
-        transition={{ duration: 2, ease: "easeOut" }}
-      />
-
-      <div className="relative z-10 flex flex-col items-center text-center">
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={phase >= 1 ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
-          transition={{ duration: 0.8, type: 'spring', bounce: 0.5 }}
-          className="w-24 h-24 rounded-full bg-[var(--color-primary)] flex items-center justify-center font-display font-bold text-5xl text-black mb-8"
+      <div className="w-[45%] pl-[8%] relative z-10 flex flex-col justify-center">
+        <motion.h2 
+          className="text-[4.5vw] font-display font-bold leading-[1.1] mb-6 text-white"
+          initial={{ opacity: 0, y: 50 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: 50 }}
+          transition={{ duration: 1, type: 'spring' }}
         >
-          π
+          Scale Your <br/>
+          <span className="text-[var(--color-primary)]">Business.</span>
+        </motion.h2>
+        
+        <motion.div 
+          className="space-y-6"
+          initial={{ opacity: 0, x: -30 }}
+          animate={phase >= 2 ? { opacity: 1, x: 0 } : { opacity: 0, x: -30 }}
+          transition={{ duration: 0.8 }}
+        >
+          <p className="text-[1.8vw] text-zinc-400">
+            List items in seconds with intuitive tools.
+          </p>
+          <p className="text-[1.8vw] text-zinc-400">
+            Manage your empire from a powerful seller dashboard.
+          </p>
         </motion.div>
+      </div>
 
-        <motion.h1 
-          className="text-[6vw] font-display font-bold text-white leading-tight"
-          initial={{ y: 30, opacity: 0 }}
-          animate={phase >= 2 ? { y: 0, opacity: 1 } : { y: 30, opacity: 0 }}
-          transition={{ duration: 0.8 }}
+      <div className="w-[55%] relative h-full flex items-center justify-center perspective-[1200px]">
+        {/* Sell Image */}
+        <motion.div
+          className="absolute w-[22vw] rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl z-0 right-[25%]"
+          initial={{ opacity: 0, y: -100, rotateY: -30, x: -50 }}
+          animate={phase >= 2 ? { opacity: 0.7, y: -30, rotateY: -15, x: 0, z: -200 } : { opacity: 0, y: -100, rotateY: -30, x: -50 }}
+          transition={{ duration: 1.2, type: 'spring', bounce: 0.3 }}
         >
-          PiBazaar
-        </motion.h1>
-
-        <motion.p
-          className="text-[2vw] text-zinc-400 mt-4"
-          initial={{ y: 20, opacity: 0 }}
-          animate={phase >= 3 ? { y: 0, opacity: 1 } : { y: 20, opacity: 0 }}
-          transition={{ duration: 0.8 }}
+          <img src={sellImg} className="w-full h-auto" alt="Sell Item" />
+        </motion.div>
+        
+        {/* Dashboard Image */}
+        <motion.div
+          className="absolute w-[26vw] rounded-[2rem] overflow-hidden border-2 border-[var(--color-primary)]/40 shadow-[0_0_60px_rgba(240,192,64,0.15)] z-10 left-[15%]"
+          initial={{ opacity: 0, y: 150, rotateY: 40, x: 100 }}
+          animate={phase >= 3 ? { opacity: 1, y: 30, rotateY: 10, x: 0, z: 0 } : { opacity: 0, y: 150, rotateY: 40, x: 100 }}
+          transition={{ duration: 1.2, type: 'spring', bounce: 0.4 }}
         >
-          The marketplace is open. Start trading with Pi today.
-        </motion.p>
+          <img src={dashboardImg} className="w-full h-auto" alt="Dashboard" />
+        </motion.div>
       </div>
     </motion.div>
   );

@@ -90,3 +90,9 @@ id = "loEV5rN0t2SFp1XB8lvGx"
 uri = "file://screenshots/15-checkout.jpg"
 type = "image"
 title = "15 — Checkout (Pi escrow + 2% seller fee)"
+
+[[outputs]]
+id = "YmpNUqf5hfI1Wa8FFs5Ft"
+uri = "file://artifacts/pibazaar-promo/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"

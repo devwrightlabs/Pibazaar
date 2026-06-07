@@ -4,3 +4,4 @@
 - [TS project refs stale .d.ts](ts-project-references-stale-dts.md) — api-server reads lib/db's emitted .d.ts, not src; after schema edits rebuild with `tsc -b lib/db --force`, deleting tsbuildinfo isn't enough.
 - [PiBazaar web migration](pibazaar-migration.md) — web is fully off Supabase onto api-server typed client (JWT `pibazaar-token`, camelCase); build needs `PORT`+`BASE_PATH`; conversations use `unread`/`otherUser`; 2% fee paid by seller on release.
 - [Pi signup hard gate](pi-auth-gate.md) — web auth is Pi-only (no manual signup/login); token verified server-side; Pi Browser framing needs CSP frame-ancestors; CORS never crashes (layered fallback); healthcheck hits /api.
+- [video-js port false alarms](video-workflow-port-detection.md) — `DIDNT_OPEN_A_PORT` on a vite artifact is usually a strictPort race, not a broken build; verify with curl/`/proc/net/tcp` (ss is unreliable here), kill strays, restart once.

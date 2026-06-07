@@ -1,93 +1,79 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import dashboardImg from '@assets/pibazaar-screens/08-dashboard.jpg';
-import messagesImg from '@assets/pibazaar-screens/11-messages.jpg';
-import sellImg from '@assets/pibazaar-screens/06-sell.jpg';
+import checkoutImg from '@assets/pibazaar-screens/15-checkout.jpg';
 
 export function Scene4() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setPhase(1), 300),
-      setTimeout(() => setPhase(2), 1000),
-      setTimeout(() => setPhase(3), 1600),
-      setTimeout(() => setPhase(4), 2200),
-      setTimeout(() => setPhase(5), 4500),
+      setTimeout(() => setPhase(1), 800),
+      setTimeout(() => setPhase(2), 2000),
+      setTimeout(() => setPhase(3), 3500),
+      setTimeout(() => setPhase(4), 7000), // exit
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
-  const cardVariants = {
-    hidden: { y: 100, opacity: 0, rotateX: 20 },
-    visible: { y: 0, opacity: 1, rotateX: 0 }
-  };
-
   return (
     <motion.div 
-      className="absolute inset-0 flex flex-col overflow-hidden bg-[var(--color-bg-dark)]"
+      className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden bg-black"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0, y: -50 }}
-      transition={{ duration: 0.8 }}
+      exit={{ scale: 1.2, opacity: 0 }}
+      transition={{ duration: 1 }}
     >
-      <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0idHJhbnNwYXJlbnQiLz4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0iI2ZmZiIvPgo8L3N2Zz4=')]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_50%)] opacity-[0.08]" />
 
-      <div className="pt-[8%] px-[10%] text-center relative z-10">
-        <motion.h2 
-          className="text-[4vw] font-display font-bold text-white mb-2"
-          initial={{ opacity: 0, y: -20 }}
-          animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
-          transition={{ duration: 0.6 }}
-        >
-          Everything you need to <span className="text-[var(--color-primary)]">scale</span>
-        </motion.h2>
-      </div>
+      <motion.div 
+        className="text-center mb-12 relative z-10"
+        initial={{ y: -50, opacity: 0, filter: 'blur(10px)' }}
+        animate={phase >= 1 ? { y: 0, opacity: 1, filter: 'blur(0px)' } : { y: -50, opacity: 0, filter: 'blur(10px)' }}
+        transition={{ duration: 1, type: 'spring' }}
+      >
+        <h2 className="text-[4.5vw] font-display font-bold text-white mb-4">
+          Protected by <span className="text-[var(--color-primary)]">Pi Escrow</span>
+        </h2>
+        <p className="text-[2vw] text-zinc-400">Funds are held securely until delivery is confirmed</p>
+      </motion.div>
 
-      <div className="flex-1 flex items-center justify-center gap-[4vw] px-[10%] relative z-10 perspective-[1200px]">
-        
-        {/* Sell Card */}
-        <motion.div 
-          className="flex flex-col items-center gap-6"
-          variants={cardVariants}
-          initial="hidden"
-          animate={phase >= 2 ? "visible" : "hidden"}
+      <div className="flex items-center gap-16">
+        <motion.div
+          className="flex flex-col items-center gap-4"
+          initial={{ x: -100, opacity: 0 }}
+          animate={phase >= 2 ? { x: 0, opacity: 1 } : { x: -100, opacity: 0 }}
           transition={{ duration: 0.8, type: 'spring' }}
         >
-          <div className="w-[18vw] rounded-[1.5rem] overflow-hidden border border-white/10 shadow-xl">
-            <img src={sellImg} className="w-full h-auto" alt="Sell Item" />
+          <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center border-2 border-zinc-800 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+            <svg className="w-12 h-12 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
           </div>
-          <span className="text-[1.5vw] font-medium text-white/80">List Items Fast</span>
+          <span className="text-[1.5vw] font-medium text-zinc-300">Buyer Protection</span>
         </motion.div>
 
-        {/* Dashboard Card (Center/Elevated) */}
-        <motion.div 
-          className="flex flex-col items-center gap-6 z-20"
-          variants={cardVariants}
-          initial="hidden"
-          animate={phase >= 3 ? "visible" : "hidden"}
-          transition={{ duration: 0.8, type: 'spring', bounce: 0.4 }}
+        <motion.div
+          className="w-[24vw] rounded-[2rem] overflow-hidden border-4 border-[var(--color-primary)]/60 shadow-[0_0_80px_rgba(240,192,64,0.3)] relative z-20"
+          initial={{ scale: 0.5, opacity: 0, rotateZ: -10 }}
+          animate={phase >= 2 ? { scale: 1, opacity: 1, rotateZ: 0 } : { scale: 0.5, opacity: 0, rotateZ: -10 }}
+          transition={{ duration: 1.2, type: 'spring', bounce: 0.5 }}
         >
-          <div className="w-[22vw] rounded-[1.5rem] overflow-hidden border-2 border-[var(--color-primary)]/30 shadow-2xl shadow-[var(--color-primary)]/10 -mt-8">
-            <img src={dashboardImg} className="w-full h-auto" alt="Dashboard" />
-          </div>
-          <span className="text-[1.8vw] font-semibold text-white">Seller Dashboard</span>
+          <img src={checkoutImg} className="w-full h-auto" alt="Checkout" />
         </motion.div>
 
-        {/* Messages Card */}
-        <motion.div 
-          className="flex flex-col items-center gap-6"
-          variants={cardVariants}
-          initial="hidden"
-          animate={phase >= 4 ? "visible" : "hidden"}
+        <motion.div
+          className="flex flex-col items-center gap-4"
+          initial={{ x: 100, opacity: 0 }}
+          animate={phase >= 3 ? { x: 0, opacity: 1 } : { x: 100, opacity: 0 }}
           transition={{ duration: 0.8, type: 'spring' }}
         >
-          <div className="w-[18vw] rounded-[1.5rem] overflow-hidden border border-white/10 shadow-xl">
-            <img src={messagesImg} className="w-full h-auto" alt="Messages" />
+          <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center border-2 border-[var(--color-primary)] shadow-[0_0_30px_rgba(240,192,64,0.2)]">
+            <svg className="w-12 h-12 text-[var(--color-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
           </div>
-          <span className="text-[1.5vw] font-medium text-white/80">In-App Chat</span>
+          <span className="text-[1.5vw] font-medium text-[var(--color-primary)]">Verified Delivery</span>
         </motion.div>
-
       </div>
     </motion.div>
   );
