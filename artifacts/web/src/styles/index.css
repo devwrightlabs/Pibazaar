@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply font-inter text-neutral-900 dark:text-neutral-50 bg-white dark:bg-neutral-950;
+  }
+
+  h1 {
+    @apply text-5xl font-bold font-mono;
+  }
+
+  h2 {
+    @apply text-4xl font-bold font-mono;
+  }
+
+  h3 {
+    @apply text-3xl font-bold font-mono;
+  }
+
+  h4 {
+    @apply text-2xl font-bold font-mono;
+  }
+
+  h5 {
+    @apply text-xl font-bold font-mono;
+  }
+
+  h6 {
+    @apply text-lg font-bold font-mono;
+  }
+
+  a {
+    @apply text-pi-blue hover:text-pi-blue/80 transition-colors;
+  }
+
+  button {
+    @apply transition-all duration-200;
+  }
+}
+
+/* Component utilities */
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-pi-gold text-pi-navy font-semibold rounded-lg hover:bg-pi-gold/90 active:bg-pi-gold/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 bg-pi-blue text-white font-semibold rounded-lg hover:bg-pi-blue/90 active:bg-pi-blue/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all;
+  }
+
+  .btn-tertiary {
+    @apply px-6 py-3 bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-50 font-semibold rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50 placeholder-neutral-500 dark:placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-pi-blue focus:border-transparent transition-all;
+  }
+
+  .card {
+    @apply bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .container-max {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .text-overflow {
+    @apply truncate;
+  }
+
+  .text-overflow-2 {
+    @apply line-clamp-2;
+  }
+
+  .text-overflow-3 {
+    @apply line-clamp-3;
+  }
+
+  .gradient-pi {
+    @apply bg-gradient-to-r from-pi-gold to-pi-blue;
+  }
+}
+
+/* Loading animation */
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 2s linear infinite;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-neutral-100 dark:bg-neutral-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-neutral-400 dark:bg-neutral-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-neutral-500 dark:bg-neutral-500;
+}

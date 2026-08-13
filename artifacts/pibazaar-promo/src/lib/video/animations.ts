@@ -179,23 +179,25 @@ export const elementAnimations = {
 } as const;
 
 // Character-level animation variants for kinetic typography
-export const charVariants: Variants = {
+// framer-motion v12: transition inside a variant state conflicts with the
+// Target index signature; use `as Variants` assertion to preserve behaviour.
+export const charVariants = {
   hidden: { opacity: 0, y: 40, rotateX: -40, transformPerspective: 800 },
   visible: {
     opacity: 1,
     y: 0,
     rotateX: 0,
     transformPerspective: 800,
-    transition: { type: 'spring', stiffness: 400, damping: 25 },
+    transition: { type: 'spring' as const, stiffness: 400, damping: 25 },
   },
-};
+} as Variants;
 
-export const charContainerVariants: Variants = {
+export const charContainerVariants = {
   hidden: {},
   visible: {
     transition: { staggerChildren: 0.03, delayChildren: 0.1 },
   },
-};
+} as Variants;
 
 // Stagger configs
 export const staggerConfigs = {
@@ -208,22 +210,22 @@ export const staggerConfigs = {
 } as const;
 
 // Common variants
-export const containerVariants: Variants = {
+export const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: staggerConfigs.medium,
   },
-};
+} as Variants;
 
-export const itemVariants: Variants = {
+export const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, ease: 'circOut' },
+    transition: { duration: 0.5, ease: 'circOut' as const },
   },
-};
+} as Variants;
 
 // Utilities
 export function staggerDelay(index: number, baseDelay: number = 0.1): number {

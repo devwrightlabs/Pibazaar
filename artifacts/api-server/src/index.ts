@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import app from "./app";
+import { initDb } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { attachRealtime } from "./lib/realtime";
 
@@ -16,6 +16,12 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// initDb FIRST — initialises the db/pool bindings before any route fires.
+await initDb();
+
+// Import app AFTER initDb so the module-level db binding is live.
+const { default: app } = await import("./app.js");
 
 const server = createServer(app);
 attachRealtime(server);

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { eq, sql } from "drizzle-orm";
 import { db, users } from "@workspace/db";
 import { asyncHandler, HttpError } from "../lib/http";
-import { hashPassword, verifyPassword } from "../lib/password";
 import { signAuthToken } from "../lib/jwt";
 import { verifyPiToken, PiApiError } from "../lib/pi";
 import { rateLimit } from "../lib/rateLimit";
@@ -47,129 +46,14 @@ async function generateUniqueUsername(base: string): Promise<string> {
   return `${clean}_${Date.now()}`;
 }
 
-// ─── Sign Up (Pi-gated: real Pioneer required) ────────────────────────────────
-//
-// The user-facing form collects only a username + password. The client also
-// runs the Pi SDK in the background (window.Pi.authenticate) and submits the
-// resulting access token. We verify that token server-to-server against the Pi
-// Platform BEFORE creating the account, so only authenticated Pioneers can
-// register. (Note: Pi's public /v2/me endpoint exposes uid + username only — it
-// does not return a KYC boolean — so "verified Pioneer" here means a valid,
-// Pi-issued identity token. This is the strongest gate the public API allows.)
-const signupSchema = z.object({
-  username: z
-    .string()
-    .min(3)
-    .max(30)
-    .regex(/^[a-zA-Z0-9_.]+$/, "Use letters, numbers, _ or ."),
-  password: z.string().min(8).max(128),
-  accessToken: z.string().min(1),
-  walletAddress: z.string().optional(),
-});
+// Pi Network compliance: apps must use ONLY the Pi Authentication SDK for
+// login — no email/password or other credential-based auth is permitted.
+// Password-based /auth/signup and /auth/login have been permanently removed.
+// /auth/pi (below) is the sole authentication + account-provisioning path;
+// first-time Pi sign-in auto-provisions an account, so no separate signup
+// step is needed.
 
-router.post(
-  "/auth/signup",
-  authLimiter,
-  asyncHandler(async (req, res) => {
-    const parsed = signupSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid input");
-    }
-    const { username, password, accessToken, walletAddress } = parsed.data;
-
-    // Pi identity gate — must pass before any account is created.
-    let piUser;
-    try {
-      piUser = await verifyPiToken(accessToken);
-    } catch (err) {
-      if (err instanceof PiApiError) {
-        throw new HttpError(
-          403,
-          "Pi verification failed. Open PiBazaar in the Pi Browser to sign up.",
-        );
-      }
-      throw err;
-    }
-
-    const [existing] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
-    if (existing) throw new HttpError(409, "Username is already taken");
-
-    // This Pi identity must not already own an account.
-    const [byPiUid] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.piUid, piUser.uid))
-      .limit(1);
-    if (byPiUid) {
-      throw new HttpError(
-        409,
-        "This Pi account already has a PiBazaar profile. Please log in instead.",
-      );
-    }
-
-    const passwordHash = await hashPassword(password);
-    try {
-      const [user] = await db
-        .insert(users)
-        .values({
-          username,
-          passwordHash,
-          piUid: piUser.uid,
-          walletAddress: walletAddress ?? null,
-          piWalletAddress: walletAddress ?? null,
-          isVerified: true,
-        })
-        .returning();
-
-      res.status(201).json({ token: tokenFor(user), user: serializeSelf(user) });
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        throw new HttpError(
-          409,
-          "That Pi account already has a profile. Please log in instead.",
-        );
-      }
-      throw err;
-    }
-  }),
-);
-
-// ─── Manual Log In (username + password) ──────────────────────────────────────
-
-const loginSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
-});
-
-router.post(
-  "/auth/login",
-  authLimiter,
-  asyncHandler(async (req, res) => {
-    const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) throw new HttpError(400, "Invalid credentials");
-    const { username, password } = parsed.data;
-
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, username))
-      .limit(1);
-    if (!user || !user.passwordHash) {
-      throw new HttpError(401, "Invalid username or password");
-    }
-    const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) throw new HttpError(401, "Invalid username or password");
-    if (user.isSuspended) throw new HttpError(403, "Account suspended");
-
-    res.json({ token: tokenFor(user), user: serializeSelf(user) });
-  }),
-);
-
-// ─── Pi Log In (step 2: returning users via Pi SDK) ───────────────────────────
+// ─── Pi Log In (sole auth path: sign-in AND first-time provisioning) ──────────
 
 const piSchema = z.object({
   accessToken: z.string().min(1),

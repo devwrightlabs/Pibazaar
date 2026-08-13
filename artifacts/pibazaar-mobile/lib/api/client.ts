@@ -20,8 +20,6 @@ import type {
   Address,
   ShippingDirectory,
   DashboardSummary,
-  SignupBody,
-  LoginBody,
   PiLoginBody,
   UpdateProfileBody,
   CreateEscrowBody,
@@ -154,12 +152,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  signup: (body: SignupBody) =>
-    request<AuthResponse>('/auth/signup', { method: 'POST', body }),
-  login: (body: LoginBody) =>
-    request<AuthResponse>('/auth/login', { method: 'POST', body }),
-  pi: (body: PiLoginBody, opts?: { link?: boolean }) =>
-    request<AuthResponse>('/auth/pi', { method: 'POST', body, auth: !!opts?.link }),
+  // Pi Authentication SDK is the only sign-in method. /auth/pi signs in
+  // returning Pioneers and auto-provisions a new account on first sign-in.
+  pi: (body: PiLoginBody) =>
+    request<AuthResponse>('/auth/pi', { method: 'POST', body }),
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
   me: () => request<{ user: SelfUser }>('/auth/me', { auth: true }),
 }

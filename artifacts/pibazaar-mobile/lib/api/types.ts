@@ -5,12 +5,12 @@ export type UserRole = 'user' | 'admin'
 export type ThemePreference = 'dark' | 'light'
 export type JurisdictionMode = 'local' | 'global'
 
-/** Logged-in user (GET /auth/me, /users/me) — passwordHash omitted. */
+/** Logged-in user (GET /auth/me, /users/me). Pi-only app: no password or
+ *  email fields exist on the account. */
 export interface SelfUser {
   id: string
   piUid: string | null
   username: string
-  email: string | null
   avatarUrl: string | null
   bio: string | null
   walletAddress: string | null
@@ -211,19 +211,6 @@ export interface DashboardSummary {
 
 // ─── Request payloads ──────────────────────────────────────────────────────
 
-export interface SignupBody {
-  username: string
-  password: string
-  /** Pi SDK access token — verified server-side to gate signup to real Pioneers. */
-  accessToken: string
-  walletAddress?: string
-}
-
-export interface LoginBody {
-  username: string
-  password: string
-}
-
 export interface PiLoginBody {
   accessToken: string
   walletAddress?: string
@@ -239,7 +226,6 @@ export interface UpdateProfileBody {
   username?: string
   bio?: string
   avatarUrl?: string
-  email?: string
   walletAddress?: string
   themePreference?: ThemePreference
   jurisdictionMode?: JurisdictionMode

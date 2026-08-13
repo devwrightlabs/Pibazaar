@@ -44,7 +44,6 @@ export default function SettingsScreen() {
 
   const [username, setUsername] = useState(user?.username ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
   const [walletAddress, setWalletAddress] = useState(user?.walletAddress ?? "");
   const [country, setCountry] = useState(user?.country ?? "");
   const [themePreference, setThemePreference] = useState<ThemePreference>(
@@ -75,7 +74,6 @@ export default function SettingsScreen() {
       await updateProfile.mutateAsync({
         username: username.trim(),
         bio: bio.trim(),
-        email: email.trim() || undefined,
         walletAddress: walletAddress.trim() || undefined,
         country: country.trim() || undefined,
         themePreference,
@@ -221,17 +219,6 @@ export default function SettingsScreen() {
               placeholderTextColor={colors.mutedForeground}
               multiline
               textAlignVertical="top"
-            />
-          </Field>
-          <Field label="Email" colors={colors}>
-            <TextInput
-              style={inputStyle(colors)}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.mutedForeground}
-              keyboardType="email-address"
-              autoCapitalize="none"
             />
           </Field>
           <Field label="Wallet address" colors={colors}>

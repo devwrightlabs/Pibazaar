@@ -9,10 +9,9 @@ export function num(value: string | null | undefined): number {
   return value == null ? 0 : Number(value);
 }
 
-/** Strip sensitive fields and normalise numeric columns for a logged-in user. */
+/** Normalise numeric columns for the logged-in user (Pi-only app: no password field). */
 export function serializeSelf(user: User) {
-  const { passwordHash: _omit, ...rest } = user;
-  return { ...rest, trustScore: num(rest.trustScore) };
+  return { ...user, trustScore: num(user.trustScore) };
 }
 
 /** Public profile — safe subset for other users to see. */

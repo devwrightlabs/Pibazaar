@@ -23,12 +23,12 @@ export const jurisdictionModeEnum = pgEnum("jurisdiction_mode", [
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  // Optional external Pi Network identifier. Present once a user logs in with Pi.
+  // Pi Network identifier — the sole identity/auth mechanism for this app.
+  // Pi Network compliance: Pi Authentication SDK only. No password-based
+  // credentials and no email collection are permitted, so neither field
+  // exists on this table.
   piUid: text("pi_uid").unique(),
   username: text("username").notNull().unique(),
-  // Set only for manually-registered (Sign Up) accounts. Null for Pi-only users.
-  passwordHash: text("password_hash"),
-  email: text("email"),
   avatarUrl: text("avatar_url"),
   bio: text("bio"),
   walletAddress: text("wallet_address"),
@@ -60,5 +60,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
-// Public-facing user shape (never expose passwordHash).
-export type PublicUser = Omit<User, "passwordHash">;
+// Public-facing user shape (Pi-only app: no sensitive credential fields exist
+// on User to begin with, so this is currently an identity alias).
+export type PublicUser = User;

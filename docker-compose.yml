@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: pibazaar-postgres
+    environment:
+      POSTGRES_USER: pibazaar
+      POSTGRES_PASSWORD: pibazaar_dev_password
+      POSTGRES_DB: pibazaar
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pibazaar']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: pibazaar-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: pibazaar-api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://pibazaar:pibazaar_dev_password@postgres:5432/pibazaar
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      PI_API_KEY: ${PI_API_KEY:-dev_key}
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./artifacts/api-server/src:/app/src
+    command: npm run dev
+
+  # Frontend App
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: pibazaar-web
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_PI_API_KEY: ${PI_API_KEY:-dev_key}
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+    volumes:
+      - ./artifacts/web/src:/app/src
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: pibazaar-network

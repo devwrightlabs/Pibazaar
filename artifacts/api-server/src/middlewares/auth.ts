@@ -33,8 +33,8 @@ async function loadUser(req: Request): Promise<PublicUser | null> {
     .where(eq(users.id, payload.sub))
     .limit(1);
   if (!row) return null;
-  const { passwordHash: _omit, ...publicUser } = row;
-  return publicUser;
+  // Pi-only app: User === PublicUser (no password field to strip).
+  return row;
 }
 
 /** Require a valid token; 401 otherwise. Also blocks suspended accounts. */
