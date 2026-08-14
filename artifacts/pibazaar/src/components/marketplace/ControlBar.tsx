@@ -1,7 +1,9 @@
 
-
-import React from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useUIStore, type ViewMode } from '@/store/useUIStore'
+import type { SortOrder } from '@/hooks/useMarketplace'
+
+// ─── SVG icons ───────────────────────────────────────────────────────────────
 
 function GridIcon() {
   return (
@@ -36,10 +38,7 @@ function SwipeIcon() {
 function MoonIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path
-        d="M14.5 10.5A6 6 0 1 1 7.5 3.5a4.5 4.5 0 0 0 7 7Z"
-        fill="currentColor"
-      />
+      <path d="M14.5 10.5A6 6 0 1 1 7.5 3.5a4.5 4.5 0 0 0 7 7Z" fill="currentColor" />
     </svg>
   )
 }
@@ -58,54 +57,176 @@ function SunIcon() {
   )
 }
 
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function XIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ─── View mode definition ─────────────────────────────────────────────────────
+
 const VIEW_BUTTONS: { mode: ViewMode; label: string; Icon: () => React.ReactElement }[] = [
   { mode: 'grid', label: 'Grid view', Icon: GridIcon },
   { mode: 'list', label: 'List view', Icon: ListIcon },
   { mode: 'swipe', label: 'Swipe view', Icon: SwipeIcon },
 ]
 
-export default function ControlBar() {
+const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
+  { value: 'recent', label: 'Newest' },
+  { value: 'price_asc', label: 'Price ↑' },
+  { value: 'price_desc', label: 'Price ↓' },
+]
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+interface ControlBarProps {
+  /** Current search query string */
+  searchQuery?: string
+  /** Called when the user types in the search box */
+  onSearch?: (q: string) => void
+  /** Current sort order */
+  sortOrder?: SortOrder
+  /** Called when the user picks a sort option */
+  onSort?: (sort: SortOrder) => void
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function ControlBar({
+  searchQuery = '',
+  onSearch,
+  sortOrder = 'recent',
+  onSort,
+}: ControlBarProps) {
   const viewMode = useUIStore((s) => s.viewMode)
   const themeMode = useUIStore((s) => s.themeMode)
   const setViewMode = useUIStore((s) => s.setViewMode)
   const setThemeMode = useUIStore((s) => s.setThemeMode)
 
+  // Debounce timer ref so we don't hammer the API on every keystroke.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        onSearch?.(value)
+      }, 300)
+    },
+    [onSearch],
+  )
+
+  const handleClear = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    onSearch?.('')
+  }, [onSearch])
+
   return (
     <div
       role="toolbar"
-      aria-label="View and theme controls"
-      className="sticky top-0 z-50 flex items-center justify-between px-4 py-2 backdrop-blur-md border-b border-border bg-control-bg"
+      aria-label="Browse controls"
+      className="sticky top-0 z-50 backdrop-blur-md border-b border-border"
+      style={{ backgroundColor: 'var(--color-control-bg, #12121A)' }}
     >
-      {/* View mode switcher */}
-      <div className="flex items-center gap-1">
-        {VIEW_BUTTONS.map(({ mode, label, Icon }) => {
-          const isActive = viewMode === mode
-          return (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              aria-label={label}
-              aria-pressed={isActive}
-              className={`p-2 rounded-lg transition-colors ${
-                isActive
-                  ? 'text-gold bg-control-active'
-                  : 'text-text-sub bg-transparent hover:bg-control-bg'
-              }`}
+      {/* Row 1: view mode + theme */}
+      <div className="flex items-center justify-between px-4 py-2">
+        {/* View mode switcher */}
+        <div className="flex items-center gap-1">
+          {VIEW_BUTTONS.map(({ mode, label, Icon }) => {
+            const isActive = viewMode === mode
+            return (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                aria-label={label}
+                aria-pressed={isActive}
+                className={`p-2 rounded-lg transition-colors ${
+                  isActive
+                    ? 'text-gold bg-control-active'
+                    : 'text-text-sub bg-transparent hover:bg-control-bg'
+                }`}
+              >
+                <Icon />
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Right: sort + theme */}
+        <div className="flex items-center gap-2">
+          {/* Sort selector */}
+          {onSort && (
+            <select
+              value={sortOrder}
+              onChange={(e) => onSort(e.target.value as SortOrder)}
+              aria-label="Sort listings"
+              className="text-xs font-semibold rounded-lg px-2 py-1.5 border border-border appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-gold"
+              style={{
+                backgroundColor: 'var(--color-surface, #1A1A24)',
+                color: 'var(--color-gold, #F0C040)',
+              }}
             >
-              <Icon />
-            </button>
-          )
-        })}
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Theme switcher */}
+          <button
+            onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+            aria-label={themeMode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="p-2 rounded-lg transition-colors text-gold bg-control-active"
+          >
+            {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
+        </div>
       </div>
 
-      {/* Theme switcher */}
-      <button
-        onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
-        aria-label={themeMode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-        className="p-2 rounded-lg transition-colors text-gold bg-control-active"
-      >
-        {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
-      </button>
+      {/* Row 2: search bar (only when wired) */}
+      {onSearch && (
+        <div className="px-4 pb-2">
+          <div
+            className="flex items-center gap-2 rounded-xl px-3 py-2 border border-border"
+            style={{ backgroundColor: 'var(--color-surface, #1A1A24)' }}
+          >
+            <span className="text-text-sub shrink-0">
+              <SearchIcon />
+            </span>
+            <input
+              type="search"
+              placeholder="Search listings…"
+              defaultValue={searchQuery}
+              onChange={handleSearchChange}
+              aria-label="Search listings"
+              className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-sub focus:outline-none min-w-0"
+            />
+            {searchQuery && (
+              <button
+                onClick={handleClear}
+                aria-label="Clear search"
+                className="shrink-0 text-text-sub hover:text-text-primary transition-colors"
+              >
+                <XIcon />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
