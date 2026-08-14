@@ -7,3 +7,4 @@ export * from "./notifications";
 export * from "./reviews";
 export * from "./revenue";
 export * from "./shipping";
+export * from "./favorites";

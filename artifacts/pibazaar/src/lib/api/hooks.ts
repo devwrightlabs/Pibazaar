@@ -16,6 +16,7 @@ import {
   reviewsApi,
   addressesApi,
   shippingApi,
+  favoritesApi,
 } from './client'
 import { subscribeRealtime } from '../realtime'
 import type {
@@ -29,6 +30,7 @@ import type {
 } from './types'
 
 export const qk = {
+  favorites: () => ['favorites'] as const,
   listings: (q?: ListingQuery) => ['listings', q ?? {}] as const,
   listing: (id: string) => ['listing', id] as const,
   myListings: (status?: string) => ['my-listings', status ?? 'all'] as const,
@@ -275,6 +277,25 @@ export function useShippingCarriers(params?: { country?: string; serviceRange?: 
 }
 
 // ─── Profile ───────────────────────────────────────────────────────────────
+
+// ─── Favorites ─────────────────────────────────────────────────────────────
+
+export function useFavorites() {
+  return useQuery({
+    queryKey: qk.favorites(),
+    queryFn: () => favoritesApi.list(),
+  })
+}
+
+export function useToggleFavorite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (listingId: string) => favoritesApi.toggle(listingId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.favorites() })
+    },
+  })
+}
 
 export function useUpdateProfile() {
   return useMutation({

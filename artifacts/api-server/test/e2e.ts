@@ -369,6 +369,73 @@ console.log("\n[q] Search + filter + sort");
   assert("combined filter: all results are electronics", cats7.every(c => c === "electronics"), JSON.stringify(cats7));
 }
 
+// ── [r] Favorites / Wishlist ──────────────────────────────────────────────────
+
+console.log("\n[r] Favorites / Wishlist");
+{
+  // [r-1] Unauthenticated GET → 401
+  const r0 = await request(app).get("/api/favorites");
+  assertStatus("GET /api/favorites (no token) → 401", r0, 401);
+
+  // [r-2] Buyer's wishlist starts empty
+  const r1 = await buyerAs.get("/api/favorites");
+  assertStatus("GET /api/favorites (buyer, empty) → 200", r1, 200);
+  assert("buyer favorites starts empty", (r1.body?.favorites ?? []).length === 0, JSON.stringify(r1.body));
+
+  // [r-3] Buyer favorites the listing
+  const r2 = await buyerAs.post(`/api/favorites/${listingId}`);
+  assertStatus("POST /api/favorites/:id (add) → 200", r2, 200);
+  assert("toggle returns favorited=true", r2.body?.favorited === true, JSON.stringify(r2.body));
+
+  // [r-4] Favorites list now contains the listing
+  const r3 = await buyerAs.get("/api/favorites");
+  assertStatus("GET /api/favorites (after add) → 200", r3, 200);
+  const favIds: string[] = (r3.body?.favorites ?? []).map((f: { listingId: string }) => f.listingId);
+  assert("favorites contains listing", favIds.includes(listingId), JSON.stringify(favIds));
+
+  // [r-5] Listing detail is embedded in the response
+  const favRow = (r3.body?.favorites ?? [])[0] as { listing?: { title?: string } } | undefined;
+  assert("embedded listing has title", favRow?.listing?.title === "Vintage Pi Collectible", JSON.stringify(favRow?.listing?.title));
+
+  // [r-6] Toggle again — unfavorite
+  const r4 = await buyerAs.post(`/api/favorites/${listingId}`);
+  assertStatus("POST /api/favorites/:id (remove) → 200", r4, 200);
+  assert("toggle returns favorited=false", r4.body?.favorited === false, JSON.stringify(r4.body));
+
+  // [r-7] Favorites list is now empty again
+  const r5 = await buyerAs.get("/api/favorites");
+  assertStatus("GET /api/favorites (after remove) → 200", r5, 200);
+  assert("favorites empty after unfavorite", (r5.body?.favorites ?? []).length === 0, JSON.stringify(r5.body?.favorites));
+
+  // [r-8] Favorite non-existent listing → 404
+  const r6 = await buyerAs.post("/api/favorites/00000000-0000-0000-0000-000000000000");
+  assertStatus("POST /api/favorites (not found) → 404", r6, 404);
+
+  // [r-9] Cross-user isolation: seller adds favorite, buyer CANNOT see it
+  // Re-add the favorite as buyer, then seller adds the same listing.
+  await buyerAs.post(`/api/favorites/${listingId}`);
+
+  const r7 = await sellerAs.get("/api/favorites");
+  assertStatus("GET /api/favorites (seller, should be empty) → 200", r7, 200);
+  const sellerFavIds: string[] = (r7.body?.favorites ?? []).map((f: { listingId: string }) => f.listingId);
+  assert("seller cannot see buyer's favorites", !sellerFavIds.includes(listingId), JSON.stringify(sellerFavIds));
+
+  // [r-10] Seller favorites the same listing — creates a separate row (isolation)
+  const r8 = await sellerAs.post(`/api/favorites/${listingId}`);
+  assertStatus("POST /api/favorites/:id (seller adds) → 200", r8, 200);
+  assert("seller toggle returns favorited=true", r8.body?.favorited === true, JSON.stringify(r8.body));
+
+  const r9 = await sellerAs.get("/api/favorites");
+  assertStatus("GET /api/favorites (seller, after add) → 200", r9, 200);
+  const sellerFavIds2: string[] = (r9.body?.favorites ?? []).map((f: { listingId: string }) => f.listingId);
+  assert("seller sees their own favorite", sellerFavIds2.includes(listingId), JSON.stringify(sellerFavIds2));
+
+  // Buyer still only sees their own — not the seller's
+  const r10 = await buyerAs.get("/api/favorites");
+  const buyerFavIds2: string[] = (r10.body?.favorites ?? []).map((f: { listingId: string }) => f.listingId);
+  assert("buyer's favorites not contaminated by seller's", buyerFavIds2.length === 1, JSON.stringify(buyerFavIds2));
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log("\n─────────────────────────────────────────────");

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useLocation } from 'wouter'
 
 import type { Listing } from '@/lib/api/types'
+import FavoriteButton from '@/components/marketplace/FavoriteButton'
 import VerifiedBadge from '@/components/VerifiedBadge'
 import TrustBadge from '@/components/marketplace/TrustBadge'
 import BuyerProtectionBadge from '@/components/ui/BuyerProtectionBadge'
@@ -60,6 +61,11 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
               BOOSTED
             </span>
           )}
+
+          {/* Favorite button overlay (swipe) */}
+          <div className="absolute top-3 right-3 z-20">
+            <FavoriteButton listingId={item.id} size="md" />
+          </div>
 
           {/* Floating pills — location + condition */}
           <div className="absolute bottom-3 left-3 right-3 flex gap-2 flex-wrap z-10">
@@ -130,6 +136,10 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
                 BOOSTED
               </span>
             )}
+            {/* Favorite button overlay (list) */}
+            <div className="absolute top-2 right-2 z-20">
+              <FavoriteButton listingId={item.id} size="sm" />
+            </div>
             {/* Floating pills */}
             <div className="absolute bottom-2 left-2 right-2 flex gap-1 flex-wrap z-10">
               {conditionLabel && (
@@ -215,12 +225,15 @@ export default function ProductCard({ item, layout = 'grid' }: ProductCardProps)
           </span>
         )}
 
-        {/* Category badge */}
-        {item.category && (
-          <span className="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full z-10 backdrop-blur-md bg-backdrop text-text-primary">
-            {item.category}
-          </span>
-        )}
+        {/* Category badge + Favorite */}
+        <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-1">
+          {item.category && (
+            <span className="text-xs px-2 py-0.5 rounded-full backdrop-blur-md bg-backdrop text-text-primary">
+              {item.category}
+            </span>
+          )}
+          <FavoriteButton listingId={item.id} size="sm" />
+        </div>
 
         {/* Floating pills — condition */}
         <div className="absolute bottom-2 left-2 right-2 flex gap-1 flex-wrap z-10">

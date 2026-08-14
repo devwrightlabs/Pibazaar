@@ -27,6 +27,8 @@ import type {
   RequestUploadBody,
   RequestUploadResponse,
   ServiceRange,
+  FavoritesPage,
+  ToggleFavoriteResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -255,6 +257,14 @@ export const shippingApi = {
 export const storageApi = {
   requestUploadUrl: (body: RequestUploadBody) =>
     request<RequestUploadResponse>('/storage/uploads/request-url', { method: 'POST', body, auth: true }),
+}
+
+// ─── Favorites ──────────────────────────────────────────────────────
+
+export const favoritesApi = {
+  list: () => request<FavoritesPage>('/favorites', { auth: true }),
+  toggle: (listingId: string) =>
+    request<ToggleFavoriteResponse>(`/favorites/${listingId}`, { method: 'POST', auth: true }),
 }
 
 /** Upload a file to object storage and return its public objectPath. */

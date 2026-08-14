@@ -11,6 +11,7 @@ import addressesRouter from "./addresses";
 import shippingRouter from "./shipping";
 import storageRouter from "./storage";
 import paymentsRouter from "./payments";
+import favoritesRouter from "./favorites";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(addressesRouter);
 router.use(shippingRouter);
 router.use(storageRouter);
 router.use(paymentsRouter);
+router.use(favoritesRouter);
 
 export default router;

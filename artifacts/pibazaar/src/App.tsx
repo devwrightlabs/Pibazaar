@@ -35,6 +35,7 @@ import SettingsPage from "@/app/settings/page";
 import ShippingPage from "@/app/shipping/page";
 import EscrowPage from "@/app/transactions/escrow/[transactionId]/page";
 import NotFound from "@/app/not-found";
+import SavedPage from "@/app/saved/page";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ function AppRoutes() {
         <Route path="/terms" component={TermsPage} />
         <Route path="/shipping" component={ShippingPage} />
         <Route path="/transactions/escrow/:transactionId" component={EscrowPage} />
+        <Route path="/saved" component={SavedPage} />
         <Route component={NotFound} />
       </Switch>
     </ErrorBoundary>

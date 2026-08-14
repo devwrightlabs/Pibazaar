@@ -254,3 +254,18 @@ CREATE INDEX IF NOT EXISTS "reviews_reviewee_idx" ON "reviews" ("reviewee_id");
 CREATE INDEX IF NOT EXISTS "shipping_carriers_country_idx" ON "shipping_carriers" ("country_code");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "shipping_carriers_range_idx" ON "shipping_carriers" ("service_range");
+--> statement-breakpoint
+
+-- ── favorites (wishlist) ──────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS "favorites" (
+  "id"         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "user_id"    UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "listing_id" UUID NOT NULL REFERENCES "listings"("id") ON DELETE CASCADE,
+  "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "favorites_user_listing_uniq" UNIQUE ("user_id", "listing_id")
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "favorites_user_idx"    ON "favorites" ("user_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "favorites_listing_idx" ON "favorites" ("listing_id");

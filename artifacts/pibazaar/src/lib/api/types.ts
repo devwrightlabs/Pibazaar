@@ -333,6 +333,23 @@ export interface ListingDraft {
   shippingCarrier: string | null
 }
 
+// ─── Favorites ────────────────────────────────────────────────────────────────
+
+export interface FavoriteEntry {
+  id: string
+  listingId: string
+  createdAt: string
+  listing: Listing
+}
+
+export interface FavoritesPage {
+  favorites: FavoriteEntry[]
+}
+
+export interface ToggleFavoriteResponse {
+  favorited: boolean
+}
+
 export const EMPTY_DRAFT: ListingDraft = {
   serverId: null,
   title: '',
