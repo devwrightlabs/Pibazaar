@@ -27,17 +27,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Typecheck (api-server)
-        run: pnpm -F @workspace/api-server run typecheck
-
-      - name: Typecheck (frontend)
-        run: pnpm -F @workspace/pibazaar run typecheck
+      # Root typecheck builds the workspace lib project-references (tsc --build) first,
+      # then typechecks every artifact package. Running per-package typecheck directly
+      # fails on a clean runner (TS6305: lib dist not built yet).
+      - name: Typecheck (build libs + all packages)
+        run: pnpm run typecheck
 
       - name: Build api-server
         run: pnpm -F @workspace/api-server run build
